@@ -29,7 +29,7 @@ class LabudaVpnService : VpnService() {
             ACTION_STOP -> stopTunnel()
             ACTION_START -> startTunnel()
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     private fun startTunnel() {
@@ -61,13 +61,18 @@ class LabudaVpnService : VpnService() {
         }
 
         val builder = Builder()
-            .setSession("LABUDA")
+            .setSession("LABUDA VPN")
             .setMtu(1500)
+            .setBlocking(false)
+            .setMetered(false)
             .addAddress("10.10.0.2", 32)
+            .addAddress("fd10:10:10::2", 128)
             .addRoute("0.0.0.0", 0)
+            .addRoute("::", 0)
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
 
+        // Keep LABUDA/Xray's own sockets outside the VPN route to prevent a TUN loop.
         runCatching { builder.addDisallowedApplication(packageName) }
 
         tun = try {
@@ -82,9 +87,10 @@ class LabudaVpnService : VpnService() {
             return
         }
 
+        Log.i(TAG, "Android VPN established: fd=${descriptor.fd}")
         val bridge = XrayCoreBridge(this)
         val config = XrayConfigBuilder.build(profile)
-        Log.i("LABUDA-XRAY", "Starting Xray for ${profile.host}:${profile.port}")
+        Log.i(TAG, "Starting Xray for ${profile.host}:${profile.port}")
         val result = bridge.start(config, descriptor.fd)
         if (result.isFailure || !bridge.isRunning()) {
             val error = result.exceptionOrNull()?.message ?: "Xray не запустился"
@@ -96,12 +102,15 @@ class LabudaVpnService : VpnService() {
         }
 
         xray = bridge
+        // The Android VPN is already established here; Xray is also running against the same fd.
+        setUnderlyingNetworks(null)
         setState(true, null)
-        updateNotification("Лабуда подключена • ${profile.name}")
+        updateNotification("VPN подключена • ${profile.name}")
+        Log.i(TAG, "LABUDA VPN ACTIVE; tunFd=${descriptor.fd}; xrayRunning=${bridge.isRunning()}")
     }
 
     private fun fail(message: String) {
-        Log.e("LABUDA-XRAY", message)
+        Log.e(TAG, message)
         setState(false, message)
         updateNotification("Ошибка подключения: $message")
         stopTunnel(keepError = true)
@@ -171,5 +180,9 @@ class LabudaVpnService : VpnService() {
         tun = null
         setState(false, null)
         super.onDestroy()
+    }
+
+    companion object {
+        private const val TAG = "LABUDA-VPN"
     }
 }
