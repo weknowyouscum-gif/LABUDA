@@ -6,8 +6,8 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -234,6 +234,13 @@ object ProfileStore {
     }
 }
 
+data class VpnStatsSnapshot(
+    val trafficBytes: Long = 0L,
+    val rxSpeed: Long = 0L,
+    val txSpeed: Long = 0L,
+    val comment: String = "Отключено"
+)
+
 @Composable
 private fun LabudaApp(activity: MainActivity) {
     var profiles by remember { mutableStateOf(ProfileStore.profiles(activity)) }
@@ -243,6 +250,7 @@ private fun LabudaApp(activity: MainActivity) {
     var connected by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
+    var vpnStats by remember { mutableStateOf(VpnStatsSnapshot()) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -262,7 +270,13 @@ private fun LabudaApp(activity: MainActivity) {
             connected = prefs.getBoolean(KEY_VPN_RUNNING, false)
             val vpnError = prefs.getString(KEY_VPN_ERROR, null)
             if (vpnError != null && !connected) message = vpnError
-            delay(300)
+            vpnStats = VpnStatsSnapshot(
+                trafficBytes = prefs.getLong(VpnStats.KEY_RX, 0L) + prefs.getLong(VpnStats.KEY_TX, 0L),
+                rxSpeed = prefs.getLong(VpnStats.KEY_RX_SPEED, 0L),
+                txSpeed = prefs.getLong(VpnStats.KEY_TX_SPEED, 0L),
+                comment = prefs.getString(VpnStats.KEY_COMMENT, if (connected) "Подключено" else "Отключено").orEmpty()
+            )
+            delay(500)
         }
     }
 
@@ -306,6 +320,7 @@ private fun LabudaApp(activity: MainActivity) {
                     connected = connected,
                     busy = busy,
                     message = message,
+                    vpnStats = vpnStats,
                     onSelect = {
                         if (connected) activity.stopVpn()
                         selected = it
@@ -384,6 +399,7 @@ private fun ImportScreen(
 @Composable
 private fun MainScreen(
     profiles: List<VlessProfile>, selected: VlessProfile?, connected: Boolean, busy: Boolean, message: String,
+    vpnStats: VpnStatsSnapshot,
     onSelect: (VlessProfile) -> Unit, onConnect: () -> Unit, onRefresh: () -> Unit, onImport: () -> Unit, onFavorite: (VlessProfile) -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
@@ -405,6 +421,8 @@ private fun MainScreen(
                 Button(onClick = onConnect, Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), enabled = selected != null || profiles.isNotEmpty()) { Text(if (connected) "Отключить" else "Подключить", fontSize = 17.sp) }
             }
         }
+        Spacer(Modifier.height(12.dp))
+        VpnStatsCard(vpnStats)
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Серверы (${profiles.size})", fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -427,6 +445,36 @@ private fun MainScreen(
         }
         if (message.isNotBlank()) Text(message, Modifier.padding(vertical = 8.dp), color = Color.Gray)
     }
+}
+
+@Composable
+private fun VpnStatsCard(stats: VpnStatsSnapshot) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.padding(18.dp)) {
+            Text("Статистика VPN", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            Text("Трафик: ${formatBytes(stats.trafficBytes)}", fontSize = 16.sp)
+            Spacer(Modifier.height(5.dp))
+            Text("Комментарий из VPN: ${stats.comment.ifBlank { "—" }}", color = Color.Gray)
+            Spacer(Modifier.height(5.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Вход: ${formatSpeed(stats.rxSpeed)}", fontSize = 14.sp)
+                Text("Выход: ${formatSpeed(stats.txSpeed)}", fontSize = 14.sp)
+            }
+        }
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes < 1024L) return "$bytes Б"
+    if (bytes < 1024L * 1024L) return "%.1f КБ".format(bytes / 1024.0)
+    if (bytes < 1024L * 1024L * 1024L) return "%.1f МБ".format(bytes / (1024.0 * 1024.0))
+    return "%.2f ГБ".format(bytes / (1024.0 * 1024.0 * 1024.0))
+}
+
+private fun formatSpeed(bytesPerSecond: Long): String {
+    if (bytesPerSecond < 0L) return "—"
+    return "${formatBytes(bytesPerSecond)}/с"
 }
 
 private suspend fun importSubscription(context: Context, input: String): Result<List<VlessProfile>> = withContext(Dispatchers.IO) {
