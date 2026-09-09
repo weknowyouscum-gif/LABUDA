@@ -3,8 +3,11 @@ package com.labuda.app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -73,7 +76,7 @@ class LabudaVpnService : VpnService() {
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
 
-        // Keep LABUDA/Xray's own sockets outside the VPN route to prevent a TUN loop.
+        // LABUDA/Xray sockets must stay on the physical network instead of re-entering its own TUN.
         runCatching { builder.addDisallowedApplication(packageName) }
 
         tun = try {
@@ -103,11 +106,43 @@ class LabudaVpnService : VpnService() {
         }
 
         xray = bridge
-        // Android VPN is established and Xray is running against the same TUN fd.
+
+        // Do not trust our own SharedPreferences as the source of truth. Android must report
+        // an actual TRANSPORT_VPN network before LABUDA can display "connected".
+        if (!waitForSystemVpn()) {
+            bridge.stop()
+            xray = null
+            descriptor.close()
+            tun = null
+            fail("Android не зарегистрировал активную VPN-сеть")
+            return
+        }
+
         setUnderlyingNetworks(null)
         setState(true, null)
         updateNotification("VPN подключена • ${profile.name}")
         Log.i(TAG, "LABUDA VPN ACTIVE; tunFd=${descriptor.fd}; xrayRunning=${bridge.isRunning()}")
+    }
+
+    private fun waitForSystemVpn(): Boolean {
+        val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        repeat(20) { attempt ->
+            val active = connectivity.allNetworks.any { network ->
+                connectivity.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            }
+            if (active) {
+                Log.i(TAG, "Android reports TRANSPORT_VPN after ${attempt * 100}ms")
+                return true
+            }
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+        return false
     }
 
     private fun fail(message: String) {
