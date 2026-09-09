@@ -1,0 +1,34 @@
+# Android / Gradle
+.gradle/
+/build/
+**/build/
+local.properties
+
+# Android Studio
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing material — NEVER commit
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+*.p8
+keystore.properties
+signing.properties
+
+# Secrets / credentials
+.env
+.env.*
+secrets.properties
+credentials.json
+service-account*.json
+
+# Generated / private files
+*.log
+.DS_Store
+Thumbs.db
