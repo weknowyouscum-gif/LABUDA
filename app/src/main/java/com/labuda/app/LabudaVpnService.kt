@@ -25,6 +25,10 @@ class LabudaVpnService : VpnService() {
         private const val KEY_VPN_RUNNING = "vpn_running"
         private const val KEY_VPN_ERROR = "vpn_error"
         private const val KEY_BYPASS_PRIVATE = "routing_bypass_private"
+        private const val KEY_ROUTING_MODE = "routing_mode"
+        private const val KEY_ROUTING_APPS = "routing_apps"
+        private const val MODE_BYPASS = "bypass"
+        private const val MODE_TUNNEL = "tunnel"
         private const val TAG = "LABUDA-VPN"
     }
 
@@ -63,8 +67,11 @@ class LabudaVpnService : VpnService() {
             return
         }
 
-        val bypassPrivate = getSharedPreferences(PREFS, MODE_PRIVATE)
-            .getBoolean(KEY_BYPASS_PRIVATE, true)
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val bypassPrivate = prefs.getBoolean(KEY_BYPASS_PRIVATE, true)
+        val routingMode = prefs.getString(KEY_ROUTING_MODE, MODE_BYPASS).orEmpty()
+            .let { if (it == MODE_TUNNEL) MODE_TUNNEL else MODE_BYPASS }
+        val selectedApps = prefs.getStringSet(KEY_ROUTING_APPS, emptySet()).orEmpty()
 
         val builder = Builder()
             .setSession("LABUDA VPN")
@@ -78,16 +85,23 @@ class LabudaVpnService : VpnService() {
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
 
-        // The VLESS endpoint itself must never enter our TUN, otherwise the
-        // Xray connection can loop back into LABUDA.
         excludeProxyEndpointRoutes(builder, profile.host)
-
-        // Optional split routing: keep RFC1918/private and IPv6 local traffic on
-        // the physical network. Public Internet remains inside the VPN.
         if (bypassPrivate) excludePrivateRoutes(builder)
 
-        // LABUDA/Xray sockets must stay on the physical network instead of re-entering its own TUN.
-        runCatching { builder.addDisallowedApplication(packageName) }
+        if (routingMode == MODE_TUNNEL) {
+            selectedApps.forEach { packageName ->
+                runCatching { builder.addAllowedApplication(packageName) }
+                    .onFailure { Log.w(TAG, "Could not allow app $packageName: ${it.message}") }
+            }
+            Log.i(TAG, "Routing mode=TUNNEL; selectedApps=${selectedApps.size}")
+        } else {
+            runCatching { builder.addDisallowedApplication(packageName) }
+            selectedApps.forEach { packageName ->
+                runCatching { builder.addDisallowedApplication(packageName) }
+                    .onFailure { Log.w(TAG, "Could not bypass app $packageName: ${it.message}") }
+            }
+            Log.i(TAG, "Routing mode=BYPASS; selectedApps=${selectedApps.size}")
+        }
 
         tun = try {
             builder.establish()
@@ -101,7 +115,7 @@ class LabudaVpnService : VpnService() {
             return
         }
 
-        Log.i(TAG, "Android VPN established: fd=${descriptor.fd}; endpoint=${profile.host}:${profile.port}; bypassPrivate=$bypassPrivate")
+        Log.i(TAG, "Android VPN established: fd=${descriptor.fd}; endpoint=${profile.host}:${profile.port}; routing=$routingMode; bypassPrivate=$bypassPrivate")
         val bridge = XrayCoreBridge(this)
         val config = XrayConfigBuilder.build(profile, bypassPrivate)
         Log.i(TAG, "Starting Xray for ${profile.host}:${profile.port}")
@@ -161,7 +175,6 @@ class LabudaVpnService : VpnService() {
             Log.i(TAG, "Route exclusion unavailable on Android < 13")
             return
         }
-
         runCatching {
             val addresses = InetAddress.getAllByName(host)
             if (addresses.isEmpty()) {
