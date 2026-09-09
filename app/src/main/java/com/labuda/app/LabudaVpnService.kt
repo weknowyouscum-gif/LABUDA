@@ -19,6 +19,7 @@ class LabudaVpnService : VpnService() {
         private const val PREFS = "labuda"
         private const val KEY_VPN_RUNNING = "vpn_running"
         private const val KEY_VPN_ERROR = "vpn_error"
+        private const val TAG = "LABUDA-VPN"
     }
 
     private var tun: ParcelFileDescriptor? = null
@@ -102,7 +103,7 @@ class LabudaVpnService : VpnService() {
         }
 
         xray = bridge
-        // The Android VPN is already established here; Xray is also running against the same fd.
+        // Android VPN is established and Xray is running against the same TUN fd.
         setUnderlyingNetworks(null)
         setState(true, null)
         updateNotification("VPN подключена • ${profile.name}")
@@ -180,9 +181,5 @@ class LabudaVpnService : VpnService() {
         tun = null
         setState(false, null)
         super.onDestroy()
-    }
-
-    companion object {
-        private const val TAG = "LABUDA-VPN"
     }
 }
