@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Size
@@ -59,7 +60,7 @@ class QrScannerActivity : ComponentActivity() {
                             handled = true
                             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("LABUDA subscription", value))
-                            setResult(Activity.RESULT_OK)
+                            setResult(Activity.RESULT_OK, Intent().setData(android.net.Uri.parse(value)))
                             finish()
                         }
                     }
