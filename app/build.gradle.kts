@@ -12,8 +12,8 @@ android {
         applicationId = "com.labuda.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 34
-        versionName = "0.34"
+        versionCode = 36
+        versionName = "0.36"
     }
 
     compileOptions {
@@ -73,7 +73,7 @@ dependencies {
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("androidx.camera:camera-camera2:1.4.2")
-    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:2.9.2")
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
