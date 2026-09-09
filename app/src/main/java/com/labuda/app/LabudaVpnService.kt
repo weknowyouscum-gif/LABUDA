@@ -60,6 +60,7 @@ class LabudaVpnService : VpnService() {
 
         if (tun != null && xray?.isRunning() == true) return
 
+        VpnStats.reset(this)
         setState(false, null)
         val profile = ProfileStore.selectedProfile(this) ?: ProfileStore.profiles(this).firstOrNull()
         if (profile == null) {
@@ -142,6 +143,8 @@ class LabudaVpnService : VpnService() {
 
         setUnderlyingNetworks(null)
         setState(true, null)
+        VpnStats.setComment(this, "Подключено • ${profile.name}")
+        VpnStats.startMonitor(this)
         updateNotification("VPN подключена • ${profile.name}")
         Log.i(TAG, "LABUDA VPN ACTIVE; tunFd=${descriptor.fd}; xrayRunning=${bridge.isRunning()}")
     }
@@ -160,6 +163,7 @@ class LabudaVpnService : VpnService() {
         )
         routes.forEach { cidr ->
             runCatching {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@runCatching
                 val prefix = cidr.substringAfterLast('/').toInt()
                 val address = InetAddress.getByName(cidr.substringBefore('/'))
                 builder.excludeRoute(IpPrefix(address, prefix))
@@ -215,6 +219,7 @@ class LabudaVpnService : VpnService() {
     private fun fail(message: String) {
         Log.e(TAG, message)
         setState(false, message)
+        VpnStats.setComment(this, "Ошибка VPN • $message")
         updateNotification("Ошибка подключения: $message")
         stopTunnel(keepError = true)
     }
@@ -225,6 +230,7 @@ class LabudaVpnService : VpnService() {
         tun?.close()
         tun = null
         setState(false, if (keepError) vpnError() else null)
+        VpnStats.setComment(this, if (keepError) "Ошибка VPN • ${vpnError().orEmpty()}" else "Отключено")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -281,6 +287,7 @@ class LabudaVpnService : VpnService() {
         tun?.close()
         tun = null
         setState(false, null)
+        VpnStats.setComment(this, "Отключено")
         super.onDestroy()
     }
 }
