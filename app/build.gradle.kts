@@ -35,7 +35,7 @@ android {
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-android-optimize.txt"
+                "proguard-rules.pro"
             )
 
             val storeFilePath = providers.environmentVariable("LABUDA_KEYSTORE_PATH").orNull
