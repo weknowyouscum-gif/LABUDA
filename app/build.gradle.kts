@@ -26,6 +26,36 @@ android {
         buildConfig = true
     }
 
+    buildTypes {
+        debug {
+            isMinifyEnabled = false
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+
+            val storeFilePath = providers.environmentVariable("LABUDA_KEYSTORE_PATH").orNull
+            val storePasswordValue = providers.environmentVariable("LABUDA_KEYSTORE_PASSWORD").orNull
+            val keyAliasValue = providers.environmentVariable("LABUDA_KEY_ALIAS").orNull
+            val keyPasswordValue = providers.environmentVariable("LABUDA_KEY_PASSWORD").orNull
+
+            if (storeFilePath != null && storePasswordValue != null && keyAliasValue != null && keyPasswordValue != null) {
+                signingConfig = signingConfigs.create("releaseSecure") {
+                    storeFile = file(storeFilePath)
+                    storePassword = storePasswordValue
+                    keyAlias = keyAliasValue
+                    keyPassword = keyPasswordValue
+                }
+            } else {
+                throw GradleException("Secure release signing is required. Configure LABUDA_KEYSTORE_PATH, LABUDA_KEYSTORE_PASSWORD, LABUDA_KEY_ALIAS and LABUDA_KEY_PASSWORD.")
+            }
+        }
+    }
+
     kotlinOptions { jvmTarget = "17" }
 }
 
