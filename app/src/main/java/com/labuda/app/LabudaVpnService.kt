@@ -7,11 +7,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
+import android.net.IpPrefix
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import java.net.InetAddress
 
 class LabudaVpnService : VpnService() {
     companion object {
@@ -76,6 +78,13 @@ class LabudaVpnService : VpnService() {
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
 
+        // The Xray core opens its VLESS connection after the Android TUN becomes active.
+        // Without an exclusion, that connection can be routed back into the same TUN,
+        // creating a routing loop and leaving Android with a VPN that has no Internet.
+        // Android 13+ supports explicit route exclusions, so exclude every currently
+        // resolved address of the selected VLESS endpoint from the VPN.
+        excludeProxyEndpointRoutes(builder, profile.host)
+
         // LABUDA/Xray sockets must stay on the physical network instead of re-entering its own TUN.
         runCatching { builder.addDisallowedApplication(packageName) }
 
@@ -91,7 +100,7 @@ class LabudaVpnService : VpnService() {
             return
         }
 
-        Log.i(TAG, "Android VPN established: fd=${descriptor.fd}")
+        Log.i(TAG, "Android VPN established: fd=${descriptor.fd}; endpoint=${profile.host}:${profile.port}")
         val bridge = XrayCoreBridge(this)
         val config = XrayConfigBuilder.build(profile)
         Log.i(TAG, "Starting Xray for ${profile.host}:${profile.port}")
@@ -122,6 +131,29 @@ class LabudaVpnService : VpnService() {
         setState(true, null)
         updateNotification("VPN подключена • ${profile.name}")
         Log.i(TAG, "LABUDA VPN ACTIVE; tunFd=${descriptor.fd}; xrayRunning=${bridge.isRunning()}")
+    }
+
+    private fun excludeProxyEndpointRoutes(builder: Builder, host: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Log.i(TAG, "Route exclusion unavailable on Android < 13")
+            return
+        }
+
+        runCatching {
+            val addresses = InetAddress.getAllByName(host)
+            if (addresses.isEmpty()) {
+                Log.w(TAG, "No addresses resolved for VLESS endpoint $host")
+                return@runCatching
+            }
+
+            addresses.forEach { address ->
+                val prefixLength = address.address.size * 8
+                builder.excludeRoute(IpPrefix(address, prefixLength))
+                Log.i(TAG, "Excluded VLESS endpoint from VPN route: ${address.hostAddress}/$prefixLength")
+            }
+        }.onFailure {
+            Log.w(TAG, "Could not resolve VLESS endpoint $host for route exclusion: ${it.message}")
+        }
     }
 
     private fun waitForSystemVpn(): Boolean {
