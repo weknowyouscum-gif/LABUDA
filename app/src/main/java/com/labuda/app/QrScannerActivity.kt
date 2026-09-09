@@ -2,6 +2,9 @@ package com.labuda.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Size
@@ -27,17 +30,13 @@ class QrScannerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         previewView = PreviewView(this)
         setContentView(previewView)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            startCamera()
-        } else {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 41)
-        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera()
+        else ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 41)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 41 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startCamera()
-        else finish()
+        if (requestCode == 41 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startCamera() else finish()
     }
 
     private fun startCamera() {
@@ -59,7 +58,10 @@ class QrScannerActivity : ComponentActivity() {
                         val value = codes.firstOrNull()?.rawValue
                         if (!value.isNullOrBlank() && !handled) {
                             handled = true
-                            setResult(Activity.RESULT_OK, intent.putExtra("qr_value", value))
+                            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("LABUDA subscription", value))
+                            Toast.makeText(this, "QR считан. Подписка скопирована в буфер.", Toast.LENGTH_SHORT).show()
+                            setResult(Activity.RESULT_OK)
                             finish()
                         }
                     }
