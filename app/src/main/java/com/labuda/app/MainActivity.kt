@@ -77,9 +77,7 @@ class MainActivity : ComponentActivity() {
         if (it.resultCode == RESULT_OK) {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
-            if (text.isNotBlank()) {
-                qrResult = text
-            }
+            if (text.isNotBlank()) qrResult = text
         }
     }
 
@@ -90,9 +88,7 @@ class MainActivity : ComponentActivity() {
         setContent { LabudaApp(this) }
     }
 
-    fun scanQr() {
-        qrImport.launch(Intent(this, QrScannerActivity::class.java))
-    }
+    fun scanQr() { qrImport.launch(Intent(this, QrScannerActivity::class.java)) }
 
     fun consumeQrResult(): String {
         val value = qrResult
@@ -143,6 +139,7 @@ object VlessParser {
             .mapNotNull { parseUri(it) }
             .distinctBy { it.raw }
             .mapIndexed { index, profile -> profile.copy(id = "${profile.host}:${profile.port}:$index") }
+            .toList()
     }
 
     private fun decodeSubscription(value: String): String {
@@ -151,9 +148,7 @@ object VlessParser {
         return try {
             val decoded = String(android.util.Base64.decode(normalized, android.util.Base64.DEFAULT), Charsets.UTF_8)
             if (decoded.contains("vless://", ignoreCase = true)) decoded else value
-        } catch (_: Exception) {
-            value
-        }
+        } catch (_: Exception) { value }
     }
 
     private fun parseUri(raw: String): VlessProfile? {
@@ -182,9 +177,7 @@ object VlessParser {
                 shortId = query["sid"].orEmpty(),
                 raw = raw
             )
-        } catch (_: Exception) {
-            null
-        }
+        } catch (_: Exception) { null }
     }
 }
 
@@ -214,8 +207,7 @@ object ProfileStore {
 
     fun select(context: Context, profile: VlessProfile) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_SELECTED_ID, profile.id)
-            .apply()
+            .putString(KEY_SELECTED_ID, profile.id).apply()
     }
 }
 
@@ -322,11 +314,7 @@ private fun ImportScreen(
     onClipboard: () -> Unit,
     onImport: () -> Unit
 ) {
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
+    Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text("LBD", fontSize = 56.sp, fontWeight = FontWeight.Black, letterSpacing = (-4).sp)
         Text("LABUDA", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(32.dp))
@@ -334,30 +322,14 @@ private fun ImportScreen(
             Column(Modifier.padding(20.dp)) {
                 Text("Добавить подписку", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = onUrlChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("URL подписки или VLESS") },
-                    singleLine = true
-                )
+                OutlinedTextField(value = url, onValueChange = onUrlChange, modifier = Modifier.fillMaxWidth(), label = { Text("URL подписки или VLESS") }, singleLine = true)
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onQr, Modifier.weight(1f)) {
-                        Icon(Icons.Outlined.QrCodeScanner, null)
-                        Spacer(Modifier.size(6.dp))
-                        Text("QR")
-                    }
-                    Button(onClick = onClipboard, Modifier.weight(1f)) {
-                        Icon(Icons.Filled.ContentPaste, null)
-                        Spacer(Modifier.size(6.dp))
-                        Text("Буфер")
-                    }
+                    Button(onClick = onQr, Modifier.weight(1f)) { Icon(Icons.Outlined.QrCodeScanner, null); Spacer(Modifier.size(6.dp)); Text("QR") }
+                    Button(onClick = onClipboard, Modifier.weight(1f)) { Icon(Icons.Filled.ContentPaste, null); Spacer(Modifier.size(6.dp)); Text("Буфер") }
                 }
                 Spacer(Modifier.height(12.dp))
-                Button(onClick = onImport, Modifier.fillMaxWidth(), enabled = !busy && url.isNotBlank()) {
-                    Text(if (busy) "Загрузка…" else "Импортировать всю подписку")
-                }
+                Button(onClick = onImport, Modifier.fillMaxWidth(), enabled = !busy && url.isNotBlank()) { Text(if (busy) "Загрузка…" else "Импортировать всю подписку") }
                 if (message.isNotBlank()) Text(message, Modifier.padding(top = 10.dp), color = Color.Gray)
             }
         }
@@ -366,16 +338,8 @@ private fun ImportScreen(
 
 @Composable
 private fun MainScreen(
-    profiles: List<VlessProfile>,
-    selected: VlessProfile?,
-    connected: Boolean,
-    busy: Boolean,
-    message: String,
-    onSelect: (VlessProfile) -> Unit,
-    onConnect: () -> Unit,
-    onRefresh: () -> Unit,
-    onImport: () -> Unit,
-    onFavorite: (VlessProfile) -> Unit
+    profiles: List<VlessProfile>, selected: VlessProfile?, connected: Boolean, busy: Boolean, message: String,
+    onSelect: (VlessProfile) -> Unit, onConnect: () -> Unit, onRefresh: () -> Unit, onImport: () -> Unit, onFavorite: (VlessProfile) -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -393,9 +357,7 @@ private fun MainScreen(
                 Text(if (connected) "Лабуда подключена" else "Лабуда отключена", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(selected?.name ?: "Выберите сервер", color = Color.Gray)
                 Spacer(Modifier.height(14.dp))
-                Button(onClick = onConnect, Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), enabled = selected != null) {
-                    Text(if (connected) "Отключить" else "Подключить", fontSize = 17.sp)
-                }
+                Button(onClick = onConnect, Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), enabled = selected != null) { Text(if (connected) "Отключить" else "Подключить", fontSize = 17.sp) }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -404,23 +366,16 @@ private fun MainScreen(
             if (busy) Text("Обновление…", color = Color.Gray)
         }
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(profiles, key = { it.id }) { profile ->
-                Card(
-                    Modifier.fillMaxWidth().clickable { onSelect(profile) },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (selected?.id == profile.id) Color(0xFFE9E9E9) else Color.White)
-                ) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Card(Modifier.fillMaxWidth().clickable { onSelect(profile) }, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (selected?.id == profile.id) Color(0xFFEDEDED) else Color.White)) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(profile.name, fontWeight = FontWeight.Bold)
-                            Text("${profile.host}:${profile.port} • ${profile.security.ifBlank { "auto" }} • ${profile.network}", color = Color.Gray, fontSize = 12.sp)
+                            Text("${profile.host}:${profile.port} • ${profile.network.uppercase()}", color = Color.Gray, fontSize = 13.sp)
+                            profile.latencyMs?.let { Text("${it} ms", color = Color.Gray, fontSize = 12.sp) }
                         }
-                        Icon(Icons.Filled.Speed, null, tint = Color.Gray)
-                        Text(profile.latencyMs?.let { " $it ms" } ?: " —", fontSize = 12.sp)
-                        IconButton(onClick = { onFavorite(profile) }) {
-                            Icon(Icons.Filled.Star, null, tint = if (profile.favorite) Color.Black else Color.LightGray)
-                        }
+                        IconButton(onClick = { onFavorite(profile) }) { Icon(if (profile.favorite) Icons.Filled.Star else Icons.Filled.Speed, "Избранное") }
                     }
                 }
             }
@@ -429,34 +384,27 @@ private fun MainScreen(
     }
 }
 
-private suspend fun importSubscription(context: Context, source: String): Result<List<VlessProfile>> = withContext(Dispatchers.IO) {
-    try {
-        val value = source.trim()
-        val body = if (value.startsWith("http://") || value.startsWith("https://")) {
-            val connection = URL(value).openConnection() as HttpURLConnection
-            try {
-                connection.connectTimeout = 12_000
-                connection.readTimeout = 20_000
-                connection.setRequestProperty("User-Agent", "LABUDA/0.1")
-                connection.inputStream.bufferedReader().use { it.readText() }
-            } finally {
-                connection.disconnect()
-            }
-        } else value
-        val list = VlessParser.parseSubscription(body)
-        if (list.isEmpty()) error("Подписка загружена, но VLESS-профили не найдены")
-        Result.success(list)
-    } catch (e: Exception) {
-        Result.failure(e)
+private suspend fun importSubscription(context: Context, input: String): Result<List<VlessProfile>> = withContext(Dispatchers.IO) {
+    runCatching {
+        val source = input.trim()
+        if (source.isBlank()) error("Пустой источник подписки")
+        val content = if (source.startsWith("http://") || source.startsWith("https://")) {
+            val connection = URL(source).openConnection() as HttpURLConnection
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 20_000
+            connection.requestMethod = "GET"
+            connection.inputStream.bufferedReader().use { it.readText() }.also { connection.disconnect() }
+        } else source
+        val profiles = VlessParser.parseSubscription(content)
+        if (profiles.isEmpty()) error("В подписке не найдено корректных VLESS-конфигураций")
+        profiles
     }
 }
 
 private fun ping(host: String, port: Int): Long? {
-    return try {
-        val start = System.nanoTime()
-        Socket().use { it.connect(InetSocketAddress(host, port), 2500) }
-        (System.nanoTime() - start) / 1_000_000
-    } catch (_: Exception) {
-        null
-    }
+    val start = System.currentTimeMillis()
+    return runCatching {
+        Socket().use { socket -> socket.connect(InetSocketAddress(host, port), 2500) }
+        System.currentTimeMillis() - start
+    }.getOrNull()
 }
