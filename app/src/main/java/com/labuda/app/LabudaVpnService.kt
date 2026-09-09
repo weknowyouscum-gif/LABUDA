@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -33,7 +34,23 @@ class LabudaVpnService : VpnService() {
 
     private fun startTunnel() {
         createChannel()
-        startForeground(NOTIFICATION_ID, notification("Запуск VPN…"))
+        try {
+            val notification = notification("Запуск VPN…")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            fail("Не удалось запустить foreground VPN: ${e.message ?: e.javaClass.simpleName}")
+            return
+        }
+
         if (tun != null && xray?.isRunning() == true) return
 
         setState(false, null)
@@ -51,12 +68,15 @@ class LabudaVpnService : VpnService() {
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
 
-        // Xray itself runs inside this application process. Excluding the app
-        // from the Android VPN prevents Xray's outbound socket from being
-        // routed back into its own TUN interface.
         runCatching { builder.addDisallowedApplication(packageName) }
 
-        tun = builder.establish()
+        tun = try {
+            builder.establish()
+        } catch (e: Exception) {
+            fail("Ошибка создания Android VPN: ${e.message ?: e.javaClass.simpleName}")
+            return
+        }
+
         val descriptor = tun ?: run {
             fail("Android не выдал TUN-интерфейс")
             return
