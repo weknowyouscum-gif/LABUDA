@@ -3,7 +3,7 @@ package com.labuda.app
 import android.net.Uri
 
 object XrayConfigBuilder {
-    fun build(profile: VlessProfile): String {
+    fun build(profile: VlessProfile, bypassPrivate: Boolean = true): String {
         val uri = Uri.parse(profile.raw)
         val q = buildMap {
             uri.queryParameterNames.forEach { put(it, uri.getQueryParameter(it).orEmpty()) }
@@ -55,9 +55,19 @@ object XrayConfigBuilder {
             append("}")
         }
 
+        val routingRules = if (bypassPrivate) {
+            """
+            [
+              {"type":"field","ip":["geoip:private"],"outboundTag":"direct"},
+              {"type":"field","inboundTag":["tun"],"outboundTag":"proxy"}
+            ]
+            """.trimIndent()
+        } else {
+            "[{\"type\":\"field\",\"inboundTag\":[\"tun\"],\"outboundTag\":\"proxy\"}]"
+        }
+
         // Android supplies the TUN file descriptor through XRAY_TUN_FD. Keep the
-        // Xray-side TUN definition deliberately minimal: advanced desktop-only
-        // options (stack/sniffing/etc.) can make core.New() reject the config.
+        // Xray-side TUN definition deliberately minimal for compatibility.
         return """
         {
           "log":{"loglevel":"warning"},
@@ -73,7 +83,7 @@ object XrayConfigBuilder {
             "settings":{"vnext":[{"address":"${escape(profile.host)}","port":${profile.port},"users":[$user]}]},
             "streamSettings":$stream
           },{"tag":"direct","protocol":"freedom"},{"tag":"block","protocol":"blackhole"}],
-          "routing":{"domainStrategy":"AsIs","rules":[{"type":"field","inboundTag":["tun"],"outboundTag":"proxy"}]}
+          "routing":{"domainStrategy":"IPIfNonMatch","rules":$routingRules}
         }
         """.trimIndent()
     }
