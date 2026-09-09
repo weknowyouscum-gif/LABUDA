@@ -50,8 +50,6 @@ android {
                     keyAlias = keyAliasValue
                     keyPassword = keyPasswordValue
                 }
-            } else {
-                throw GradleException("Secure release signing is required. Configure LABUDA_KEYSTORE_PATH, LABUDA_KEYSTORE_PASSWORD, LABUDA_KEY_ALIAS and LABUDA_KEY_PASSWORD.")
             }
         }
     }
