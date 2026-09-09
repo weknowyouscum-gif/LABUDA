@@ -32,7 +32,7 @@ class LabudaVpnService : VpnService() {
         startForeground(NOTIFICATION_ID, notification())
         if (tun != null) return
 
-        val profile = ProfileStore.profiles(this).firstOrNull()
+        val profile = ProfileStore.selectedProfile(this) ?: ProfileStore.profiles(this).firstOrNull()
         if (profile == null) {
             stopTunnel()
             return
