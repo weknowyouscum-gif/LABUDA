@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -67,6 +68,8 @@ private const val PREFS = "labuda"
 private const val KEY_SUB_URL = "subscription_url"
 private const val KEY_PROFILES = "profiles"
 private const val KEY_SELECTED_ID = "selected_profile_id"
+private const val KEY_VPN_RUNNING = "vpn_running"
+private const val KEY_VPN_ERROR = "vpn_error"
 
 class MainActivity : ComponentActivity() {
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -186,7 +189,7 @@ object ProfileStore {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val editor = prefs.edit()
             .putString(KEY_SUB_URL, subscription)
-            .putString(KEY_PROFILES, profiles.joinToString("\n") { it.raw })
+            .putString(KEY_PROFILES, profiles.joinToString("\\n") { it.raw })
         selectedId?.let { editor.putString(KEY_SELECTED_ID, it) }
         editor.apply()
     }
@@ -230,6 +233,16 @@ private fun LabudaApp(activity: MainActivity) {
             showImport = true
         }
         if (profiles.isNotEmpty()) profiles = profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }
+    }
+
+    LaunchedEffect(Unit) {
+        val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        while (true) {
+            connected = prefs.getBoolean(KEY_VPN_RUNNING, false)
+            val vpnError = prefs.getString(KEY_VPN_ERROR, null)
+            if (vpnError != null && !connected) message = vpnError
+            delay(300)
+        }
     }
 
     MaterialTheme {
@@ -276,8 +289,12 @@ private fun LabudaApp(activity: MainActivity) {
                         connected = false
                     },
                     onConnect = {
-                        if (connected) { activity.stopVpn(); connected = false }
-                        else if (selected != null) { ProfileStore.select(activity, selected!!); activity.startVpn(); connected = true }
+                        if (connected) {
+                            activity.stopVpn()
+                        } else if (selected != null) {
+                            ProfileStore.select(activity, selected!!)
+                            activity.startVpn()
+                        }
                     },
                     onRefresh = {
                         if (subscriptionUrl.isBlank()) return@MainScreen
