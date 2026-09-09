@@ -26,7 +26,6 @@ object XrayConfigBuilder {
 
         val stream = buildString {
             append("{\"network\":\"").append(escape(network)).append("\",\"security\":\"").append(escape(security)).append("\"")
-
             when (security) {
                 "reality" -> {
                     append(",\"realitySettings\":{\"serverName\":\"").append(escape(sni))
@@ -41,7 +40,6 @@ object XrayConfigBuilder {
                     append("}")
                 }
             }
-
             if (network == "ws") {
                 append(",\"wsSettings\":{\"path\":\"").append(escape(q["path"].orEmpty().ifBlank { "/" }))
                     .append("\",\"headers\":{\"Host\":\"").append(escape(q["host"].orEmpty().ifBlank { sni })).append("\"}}")
@@ -58,7 +56,7 @@ object XrayConfigBuilder {
         val routingRules = if (bypassPrivate) {
             """
             [
-              {"type":"field","ip":["geoip:private"],"outboundTag":"direct"},
+              {"type":"field","ip":["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","100.64.0.0/10","169.254.0.0/16","127.0.0.0/8","::1/128","fc00::/7","fe80::/10"],"outboundTag":"direct"},
               {"type":"field","inboundTag":["tun"],"outboundTag":"proxy"}
             ]
             """.trimIndent()
@@ -66,8 +64,6 @@ object XrayConfigBuilder {
             "[{\"type\":\"field\",\"inboundTag\":[\"tun\"],\"outboundTag\":\"proxy\"}]"
         }
 
-        // Android supplies the TUN file descriptor through XRAY_TUN_FD. Keep the
-        // Xray-side TUN definition deliberately minimal for compatibility.
         return """
         {
           "log":{"loglevel":"warning"},
