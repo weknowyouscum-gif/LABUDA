@@ -23,6 +23,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Fetch Xray Android engine
+        run: |
+          mkdir -p app/libs
+          curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
+            https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - name: Upload APK
