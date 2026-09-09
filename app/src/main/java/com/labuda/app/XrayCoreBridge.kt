@@ -13,9 +13,12 @@ class XrayCoreBridge(private val context: Context) {
     private val initialized = AtomicBoolean(false)
 
     private val callback = object : CoreCallbackHandler {
-        override fun startup(): Int { Log.i(TAG, "Xray started"); return 0 }
-        override fun shutdown(): Int { Log.i(TAG, "Xray stopped"); return 0 }
-        override fun onEmitStatus(code: Int, message: String): Int { Log.i(TAG, "Xray[$code] $message"); return 0 }
+        override fun startup(): Long { Log.i(TAG, "Xray started"); return 0L }
+        override fun shutdown(): Long { Log.i(TAG, "Xray stopped"); return 0L }
+        override fun onEmitStatus(code: Long, message: String): Long {
+            Log.i(TAG, "Xray[$code] $message")
+            return 0L
+        }
     }
 
     fun start(config: String, tunFd: Int): Result<Unit> = runCatching {
@@ -27,7 +30,11 @@ class XrayCoreBridge(private val context: Context) {
         controller?.startLoop(config, tunFd) ?: error("Xray controller is not initialized")
     }
 
-    fun stop() { runCatching { controller?.stopLoop() }; controller = null; initialized.set(false) }
+    fun stop() {
+        runCatching { controller?.stopLoop() }
+        controller = null
+        initialized.set(false)
+    }
 
     fun isRunning(): Boolean = controller?.isRunning == true
 
