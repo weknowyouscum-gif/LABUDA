@@ -55,6 +55,9 @@ object XrayConfigBuilder {
             append("}")
         }
 
+        // Android supplies the TUN file descriptor through XRAY_TUN_FD. Keep the
+        // Xray-side TUN definition deliberately minimal: advanced desktop-only
+        // options (stack/sniffing/etc.) can make core.New() reject the config.
         return """
         {
           "log":{"loglevel":"warning"},
@@ -62,8 +65,7 @@ object XrayConfigBuilder {
             "tag":"tun",
             "port":0,
             "protocol":"tun",
-            "settings":{"name":"labuda0","mtu":1500,"stack":"gvisor","userLevel":8},
-            "sniffing":{"enabled":true,"destOverride":["http","tls","quic"]}
+            "settings":{"name":"labuda0","mtu":1500}
           }],
           "outbounds":[{
             "tag":"proxy",
