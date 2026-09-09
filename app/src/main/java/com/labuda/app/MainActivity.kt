@@ -50,7 +50,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,15 +66,38 @@ import java.net.Socket
 private const val PREFS = "labuda"
 private const val KEY_SUB_URL = "subscription_url"
 private const val KEY_PROFILES = "profiles"
+private const val KEY_SELECTED_ID = "selected_profile_id"
 
 class MainActivity : ComponentActivity() {
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) startVpnService()
     }
 
+    private val qrImport = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == RESULT_OK) {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+            if (text.isNotBlank()) {
+                qrResult = text
+            }
+        }
+    }
+
+    private var qrResult by mutableStateOf("")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { LabudaApp(this) }
+    }
+
+    fun scanQr() {
+        qrImport.launch(Intent(this, QrScannerActivity::class.java))
+    }
+
+    fun consumeQrResult(): String {
+        val value = qrResult
+        qrResult = ""
+        return value
     }
 
     fun startVpn() {
@@ -112,20 +134,23 @@ data class VlessProfile(
 )
 
 object VlessParser {
+    private val VLESS_PATTERN = Regex("vless://[^\\s]+", RegexOption.IGNORE_CASE)
+
     fun parseSubscription(input: String): List<VlessProfile> {
         val decoded = decodeSubscription(input.trim())
-        return decoded.lines().map { it.trim() }
-            .filter { it.startsWith("vless://", true) }
+        return VLESS_PATTERN.findAll(decoded)
+            .map { it.value.trim().trimEnd(',', ';') }
             .mapNotNull { parseUri(it) }
             .distinctBy { it.raw }
             .mapIndexed { index, profile -> profile.copy(id = "${profile.host}:${profile.port}:$index") }
     }
 
     private fun decodeSubscription(value: String): String {
-        if (value.startsWith("vless://", true)) return value
+        if (value.contains("vless://", ignoreCase = true)) return value
         val normalized = value.replace("\\s".toRegex(), "").replace('-', '+').replace('_', '/')
         return try {
-            String(android.util.Base64.decode(normalized, android.util.Base64.DEFAULT), Charsets.UTF_8)
+            val decoded = String(android.util.Base64.decode(normalized, android.util.Base64.DEFAULT), Charsets.UTF_8)
+            if (decoded.contains("vless://", ignoreCase = true)) decoded else value
         } catch (_: Exception) {
             value
         }
@@ -164,11 +189,13 @@ object VlessParser {
 }
 
 object ProfileStore {
-    fun save(context: Context, subscription: String, profiles: List<VlessProfile>) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+    fun save(context: Context, subscription: String, profiles: List<VlessProfile>, selectedId: String? = null) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
             .putString(KEY_SUB_URL, subscription)
             .putString(KEY_PROFILES, profiles.joinToString("\n") { it.raw })
-            .apply()
+        selectedId?.let { editor.putString(KEY_SELECTED_ID, it) }
+        editor.apply()
     }
 
     fun subscription(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -177,13 +204,26 @@ object ProfileStore {
     fun profiles(context: Context): List<VlessProfile> = VlessParser.parseSubscription(
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROFILES, "").orEmpty()
     )
+
+    fun selectedProfile(context: Context): VlessProfile? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val profiles = profiles(context)
+        val id = prefs.getString(KEY_SELECTED_ID, null)
+        return profiles.firstOrNull { it.id == id } ?: profiles.firstOrNull()
+    }
+
+    fun select(context: Context, profile: VlessProfile) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_SELECTED_ID, profile.id)
+            .apply()
+    }
 }
 
 @Composable
 private fun LabudaApp(activity: MainActivity) {
     var profiles by remember { mutableStateOf(ProfileStore.profiles(activity)) }
     var subscriptionUrl by remember { mutableStateOf(ProfileStore.subscription(activity)) }
-    var selected by remember { mutableStateOf<VlessProfile?>(profiles.firstOrNull()) }
+    var selected by remember { mutableStateOf(ProfileStore.selectedProfile(activity)) }
     var showImport by remember { mutableStateOf(profiles.isEmpty()) }
     var connected by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -191,6 +231,12 @@ private fun LabudaApp(activity: MainActivity) {
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
+        val qr = activity.consumeQrResult()
+        if (qr.isNotBlank()) {
+            subscriptionUrl = qr
+            message = "QR распознан. Нажми «Импортировать всю подписку»."
+            showImport = true
+        }
         if (profiles.isNotEmpty()) profiles = profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }
     }
 
@@ -202,7 +248,7 @@ private fun LabudaApp(activity: MainActivity) {
                     onUrlChange = { subscriptionUrl = it },
                     busy = busy,
                     message = message,
-                    onQr = { activity.startActivity(Intent(activity, QrScannerActivity::class.java)) },
+                    onQr = { activity.scanQr() },
                     onClipboard = {
                         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
@@ -217,7 +263,7 @@ private fun LabudaApp(activity: MainActivity) {
                             result.onSuccess { list ->
                                 profiles = list
                                 selected = list.firstOrNull()
-                                ProfileStore.save(activity, subscriptionUrl, list)
+                                ProfileStore.save(activity, subscriptionUrl, list, selected?.id)
                                 showImport = false
                                 message = "Импортировано серверов: ${list.size}"
                             }.onFailure { message = it.message ?: "Не удалось импортировать подписку" }
@@ -231,10 +277,15 @@ private fun LabudaApp(activity: MainActivity) {
                     connected = connected,
                     busy = busy,
                     message = message,
-                    onSelect = { selected = it },
+                    onSelect = {
+                        if (connected) activity.stopVpn()
+                        selected = it
+                        ProfileStore.select(activity, it)
+                        connected = false
+                    },
                     onConnect = {
                         if (connected) { activity.stopVpn(); connected = false }
-                        else if (selected != null) { activity.startVpn(); connected = true }
+                        else if (selected != null) { ProfileStore.select(activity, selected!!); activity.startVpn(); connected = true }
                     },
                     onRefresh = {
                         if (subscriptionUrl.isBlank()) return@MainScreen
@@ -244,8 +295,8 @@ private fun LabudaApp(activity: MainActivity) {
                             busy = false
                             result.onSuccess { list ->
                                 profiles = list
-                                selected = list.firstOrNull()
-                                ProfileStore.save(activity, subscriptionUrl, list)
+                                selected = list.firstOrNull { it.id == selected?.id } ?: list.firstOrNull()
+                                ProfileStore.save(activity, subscriptionUrl, list, selected?.id)
                                 message = "Подписка обновлена: ${list.size} серверов"
                             }.onFailure { message = it.message ?: "Ошибка обновления" }
                         }
@@ -253,7 +304,7 @@ private fun LabudaApp(activity: MainActivity) {
                     onImport = { showImport = true },
                     onFavorite = { profile ->
                         profiles = profiles.map { if (it.id == profile.id) it.copy(favorite = !it.favorite) else it }
-                        ProfileStore.save(activity, subscriptionUrl, profiles)
+                        ProfileStore.save(activity, subscriptionUrl, profiles, selected?.id)
                     }
                 )
             }
