@@ -8,10 +8,10 @@ object XrayConfigBuilder {
         val q = buildMap {
             uri.queryParameterNames.forEach { put(it, uri.getQueryParameter(it).orEmpty()) }
         }
-        val security = q["security"].orEmpty().ifBlank { "none" }
-        val network = q["type"].orEmpty().ifBlank { "tcp" }
+        val security = q["security"].orEmpty().ifBlank { "none" }.lowercase()
+        val network = q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } }.lowercase()
         val flow = q["flow"].orEmpty()
-        val sni = q["sni"].orEmpty().ifBlank { q["host"].orEmpty() }
+        val sni = q["sni"].orEmpty().ifBlank { q["host"].orEmpty() }.ifBlank { profile.host }
         val fingerprint = q["fp"].orEmpty().ifBlank { "chrome" }
         val alpn = q["alpn"].orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
         val publicKey = q["pbk"].orEmpty()
@@ -26,11 +26,25 @@ object XrayConfigBuilder {
 
         val stream = buildString {
             append("{\"network\":\"").append(escape(network)).append("\",\"security\":\"").append(escape(security)).append("\"")
-            if (security == "reality") {
-                append(",\"realitySettings\":{\"serverName\":\"").append(escape(sni)).append("\",\"fingerprint\":\"").append(escape(fingerprint)).append("\",\"publicKey\":\"").append(escape(publicKey)).append("\",\"shortId\":\"").append(escape(shortId)).append("\",\"spiderX\":\"").append(escape(spiderX)).append("\"}")
+
+            when (security) {
+                "reality" -> {
+                    append(",\"realitySettings\":{\"serverName\":\"").append(escape(sni))
+                        .append("\",\"fingerprint\":\"").append(escape(fingerprint))
+                        .append("\",\"publicKey\":\"").append(escape(publicKey))
+                        .append("\",\"shortId\":\"").append(escape(shortId))
+                        .append("\",\"spiderX\":\"").append(escape(spiderX)).append("\"}")
+                }
+                "tls" -> {
+                    append(",\"tlsSettings\":{\"serverName\":\"").append(escape(sni)).append("\",\"fingerprint\":\"").append(escape(fingerprint)).append("\"")
+                    if (alpn.isNotEmpty()) append(",\"alpn\":[").append(alpn.joinToString(",") { "\"${escape(it)}\"" }).append("]")
+                    append("}")
+                }
             }
+
             if (network == "ws") {
-                append(",\"wsSettings\":{\"path\":\"").append(escape(q["path"].orEmpty().ifBlank { "/" })).append("\",\"headers\":{\"Host\":\"").append(escape(q["host"].orEmpty().ifBlank { sni })).append("\"}}")
+                append(",\"wsSettings\":{\"path\":\"").append(escape(q["path"].orEmpty().ifBlank { "/" }))
+                    .append("\",\"headers\":{\"Host\":\"").append(escape(q["host"].orEmpty().ifBlank { sni })).append("\"}}")
             }
             if (network == "grpc") {
                 append(",\"grpcSettings\":{\"serviceName\":\"").append(escape(q["serviceName"].orEmpty())).append("\"}")
@@ -38,7 +52,6 @@ object XrayConfigBuilder {
             if (network == "tcp" && q["headerType"].orEmpty().isNotBlank()) {
                 append(",\"tcpSettings\":{\"header\":{\"type\":\"").append(escape(q["headerType"].orEmpty())).append("\"}}")
             }
-            if (alpn.isNotEmpty()) append(",\"tlsSettings\":{\"serverName\":\"").append(escape(sni)).append("\",\"alpn\":[").append(alpn.joinToString(",") { "\"${escape(it)}\"" }).append("]}")
             append("}")
         }
 
