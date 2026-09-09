@@ -17,6 +17,7 @@ class LabudaVpnService : VpnService() {
     }
 
     private var tun: ParcelFileDescriptor? = null
+    private var xray: XrayCoreBridge? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -30,6 +31,13 @@ class LabudaVpnService : VpnService() {
         createChannel()
         startForeground(NOTIFICATION_ID, notification())
         if (tun != null) return
+
+        val profile = ProfileStore.profiles(this).firstOrNull()
+        if (profile == null) {
+            stopTunnel()
+            return
+        }
+
         tun = Builder()
             .setSession("LABUDA")
             .setMtu(1500)
@@ -38,9 +46,23 @@ class LabudaVpnService : VpnService() {
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
             .establish()
+
+        val descriptor = tun ?: run { stopTunnel(); return }
+        val bridge = XrayCoreBridge(this)
+        val result = bridge.start(XrayConfigBuilder.build(profile), descriptor.fd)
+        if (result.isFailure) {
+            bridge.stop()
+            descriptor.close()
+            tun = null
+            stopTunnel()
+            return
+        }
+        xray = bridge
     }
 
     private fun stopTunnel() {
+        runCatching { xray?.stop() }
+        xray = null
         tun?.close()
         tun = null
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -49,8 +71,9 @@ class LabudaVpnService : VpnService() {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(NotificationChannel(CHANNEL, "LABUDA VPN", NotificationManager.IMPORTANCE_LOW))
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(CHANNEL, "LABUDA VPN", NotificationManager.IMPORTANCE_LOW)
+            )
         }
     }
 
@@ -58,7 +81,7 @@ class LabudaVpnService : VpnService() {
         return if (Build.VERSION.SDK_INT >= 26) {
             Notification.Builder(this, CHANNEL)
                 .setContentTitle("Лабуда подключена")
-                .setContentText("VPN-сервис LABUDA активен")
+                .setContentText("Xray VPN активен")
                 .setSmallIcon(com.labuda.app.R.drawable.ic_labuda)
                 .setOngoing(true)
                 .build()
@@ -66,12 +89,12 @@ class LabudaVpnService : VpnService() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
                 .setContentTitle("Лабуда подключена")
-                .setContentText("VPN-сервис LABUDA активен")
+                .setContentText("Xray VPN активен")
                 .setSmallIcon(com.labuda.app.R.drawable.ic_labuda)
                 .setOngoing(true)
                 .build()
         }
     }
 
-    override fun onDestroy() { tun?.close(); tun = null; super.onDestroy() }
+    override fun onDestroy() { runCatching { xray?.stop() }; tun?.close(); tun = null; super.onDestroy() }
 }
