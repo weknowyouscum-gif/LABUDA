@@ -24,6 +24,7 @@ class LabudaVpnService : VpnService() {
         private const val PREFS = "labuda"
         private const val KEY_VPN_RUNNING = "vpn_running"
         private const val KEY_VPN_ERROR = "vpn_error"
+        private const val KEY_BYPASS_PRIVATE = "routing_bypass_private"
         private const val TAG = "LABUDA-VPN"
     }
 
@@ -43,11 +44,7 @@ class LabudaVpnService : VpnService() {
         try {
             val notification = notification("Запуск VPN…")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                )
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else {
                 @Suppress("DEPRECATION")
                 startForeground(NOTIFICATION_ID, notification)
@@ -66,6 +63,9 @@ class LabudaVpnService : VpnService() {
             return
         }
 
+        val bypassPrivate = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getBoolean(KEY_BYPASS_PRIVATE, true)
+
         val builder = Builder()
             .setSession("LABUDA VPN")
             .setMtu(1500)
@@ -78,12 +78,13 @@ class LabudaVpnService : VpnService() {
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
 
-        // The Xray core opens its VLESS connection after the Android TUN becomes active.
-        // Without an exclusion, that connection can be routed back into the same TUN,
-        // creating a routing loop and leaving Android with a VPN that has no Internet.
-        // Android 13+ supports explicit route exclusions, so exclude every currently
-        // resolved address of the selected VLESS endpoint from the VPN.
+        // The VLESS endpoint itself must never enter our TUN, otherwise the
+        // Xray connection can loop back into LABUDA.
         excludeProxyEndpointRoutes(builder, profile.host)
+
+        // Optional split routing: keep RFC1918/private and IPv6 local traffic on
+        // the physical network. Public Internet remains inside the VPN.
+        if (bypassPrivate) excludePrivateRoutes(builder)
 
         // LABUDA/Xray sockets must stay on the physical network instead of re-entering its own TUN.
         runCatching { builder.addDisallowedApplication(packageName) }
@@ -100,9 +101,9 @@ class LabudaVpnService : VpnService() {
             return
         }
 
-        Log.i(TAG, "Android VPN established: fd=${descriptor.fd}; endpoint=${profile.host}:${profile.port}")
+        Log.i(TAG, "Android VPN established: fd=${descriptor.fd}; endpoint=${profile.host}:${profile.port}; bypassPrivate=$bypassPrivate")
         val bridge = XrayCoreBridge(this)
-        val config = XrayConfigBuilder.build(profile)
+        val config = XrayConfigBuilder.build(profile, bypassPrivate)
         Log.i(TAG, "Starting Xray for ${profile.host}:${profile.port}")
         val result = bridge.start(config, descriptor.fd)
         if (result.isFailure || !bridge.isRunning()) {
@@ -116,8 +117,6 @@ class LabudaVpnService : VpnService() {
 
         xray = bridge
 
-        // Do not trust our own SharedPreferences as the source of truth. Android must report
-        // an actual TRANSPORT_VPN network before LABUDA can display "connected".
         if (!waitForSystemVpn()) {
             bridge.stop()
             xray = null
@@ -133,6 +132,30 @@ class LabudaVpnService : VpnService() {
         Log.i(TAG, "LABUDA VPN ACTIVE; tunFd=${descriptor.fd}; xrayRunning=${bridge.isRunning()}")
     }
 
+    private fun excludePrivateRoutes(builder: Builder) {
+        val routes = listOf(
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "100.64.0.0/10",
+            "169.254.0.0/16",
+            "127.0.0.0/8",
+            "::1/128",
+            "fc00::/7",
+            "fe80::/10"
+        )
+        routes.forEach { cidr ->
+            runCatching {
+                val prefix = cidr.substringAfterLast('/').toInt()
+                val address = InetAddress.getByName(cidr.substringBefore('/'))
+                builder.excludeRoute(IpPrefix(address, prefix))
+                Log.i(TAG, "Excluded private route: $cidr")
+            }.onFailure { error ->
+                Log.w(TAG, "Could not exclude route $cidr: ${error.message}")
+            }
+        }
+    }
+
     private fun excludeProxyEndpointRoutes(builder: Builder, host: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             Log.i(TAG, "Route exclusion unavailable on Android < 13")
@@ -145,7 +168,6 @@ class LabudaVpnService : VpnService() {
                 Log.w(TAG, "No addresses resolved for VLESS endpoint $host")
                 return@runCatching
             }
-
             addresses.forEach { address ->
                 val prefixLength = address.address.size * 8
                 builder.excludeRoute(IpPrefix(address, prefixLength))
@@ -232,8 +254,7 @@ class LabudaVpnService : VpnService() {
     }
 
     private fun updateNotification(text: String) {
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, notification(text))
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text))
     }
 
     override fun onRevoke() {
