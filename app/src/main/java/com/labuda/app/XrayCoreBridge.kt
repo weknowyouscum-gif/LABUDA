@@ -24,9 +24,8 @@ class XrayCoreBridge(private val context: Context) {
     fun start(config: String, tunFd: Int): Result<Unit> = runCatching {
         if (initialized.compareAndSet(false, true)) {
             Seq.setContext(context.applicationContext)
-            // AndroidLibXrayLite/Xray expects xray.xudp.basekey to be base64-encoded
-            // and to decode to exactly 32 bytes. A 32-character base64 string decodes
-            // to only 24 bytes, which causes: "Base key must be 32 bytes".
+            // Xray expects xray.xudp.basekey as Raw URL-safe Base64
+            // without padding, decoding to exactly 32 bytes.
             Libv2ray.initCoreEnv(context.filesDir.absolutePath, XUDP_BASE_KEY_B64)
             controller = Libv2ray.newCoreController(callback)
         }
@@ -43,8 +42,8 @@ class XrayCoreBridge(private val context: Context) {
 
     companion object {
         private const val TAG = "LABUDA-XRAY"
-        // Base64 of the 32-byte ASCII value: LABUDA-XUDP-BASEKEY-20260909-010
-        // Decoded length: exactly 32 bytes.
-        private const val XUDP_BASE_KEY_B64 = "TEFCVURBLVhVRFAtQkFTRUtFWS0yMDI2MDkwOS0wMTA="
+        // Raw URL-safe Base64 of the 32-byte ASCII value:
+        // LABUDA-XUDP-BASEKEY-20260909-010
+        private const val XUDP_BASE_KEY_B64 = "TEFCVURBLVhVRFAtQkFTRUtFWS0yMDI2MDkwOS0wMTA"
     }
 }
