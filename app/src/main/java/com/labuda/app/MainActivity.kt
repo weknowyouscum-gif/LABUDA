@@ -1,13 +1,10 @@
 package com.labuda.app
 
-import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,40 +28,40 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
+import java.net.InetSocketAddress
 import java.net.URI
 import java.net.URL
-import java.util.Base64
-import java.util.concurrent.Executors
-import java.net.InetSocketAddress
+import java.net.URLDecoder
 import java.net.Socket
 
 private const val PREFS = "labuda"
@@ -73,7 +70,7 @@ private const val KEY_PROFILES = "profiles"
 
 class MainActivity : ComponentActivity() {
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode == RESULT_OK) startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_START))
+        if (it.resultCode == RESULT_OK) startVpnService()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,12 +80,16 @@ class MainActivity : ComponentActivity() {
 
     fun startVpn() {
         val intent = VpnService.prepare(this)
-        if (intent != null) vpnPermission.launch(intent) else {
-            startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_START))
-        }
+        if (intent != null) vpnPermission.launch(intent) else startVpnService()
     }
 
-    fun stopVpn() = startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_STOP))
+    private fun startVpnService() {
+        startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_START))
+    }
+
+    fun stopVpn() {
+        startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_STOP))
+    }
 }
 
 data class VlessProfile(
@@ -113,12 +114,11 @@ data class VlessProfile(
 object VlessParser {
     fun parseSubscription(input: String): List<VlessProfile> {
         val decoded = decodeSubscription(input.trim())
-        return decoded.lines()
-            .map { it.trim() }
+        return decoded.lines().map { it.trim() }
             .filter { it.startsWith("vless://", true) }
             .mapNotNull { parseUri(it) }
             .distinctBy { it.raw }
-            .mapIndexed { index, p -> p.copy(id = "${p.host}:${p.port}:$index") }
+            .mapIndexed { index, profile -> profile.copy(id = "${profile.host}:${profile.port}:$index") }
     }
 
     private fun decodeSubscription(value: String): String {
@@ -131,59 +131,67 @@ object VlessParser {
         }
     }
 
-    private fun parseUri(raw: String): VlessProfile? = try {
-        val uri = URI(raw)
-        val user = uri.userInfo ?: return null
-        val uuid = user.substringBefore(':')
-        if (uuid.isBlank() || uri.host.isNullOrBlank()) return null
-        val q = uri.rawQuery.orEmpty().split('&').mapNotNull {
-            val p = it.split('=', limit = 2); if (p.size == 2) p[0] to java.net.URLDecoder.decode(p[1], "UTF-8") else null
-        }.toMap()
-        VlessProfile(
-            id = raw.hashCode().toString(),
-            name = java.net.URLDecoder.decode(uri.fragment.orEmpty().ifBlank { uri.host }, "UTF-8"),
-            uuid = uuid,
-            host = uri.host!!,
-            port = if (uri.port > 0) uri.port else 443,
-            security = q["security"].orEmpty(),
-            network = q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
-            type = q["type"].orEmpty().ifBlank { "tcp" },
-            path = q["path"].orEmpty(),
-            sni = q["sni"].orEmpty().ifBlank { q["host"].orEmpty() },
-            fingerprint = q["fp"].orEmpty(),
-            publicKey = q["pbk"].orEmpty(),
-            shortId = q["sid"].orEmpty(),
-            raw = raw
-        )
-    } catch (_: Exception) { null }
+    private fun parseUri(raw: String): VlessProfile? {
+        return try {
+            val uri = URI(raw)
+            val user = uri.userInfo ?: return null
+            val uuid = user.substringBefore(':')
+            if (uuid.isBlank() || uri.host.isNullOrBlank()) return null
+            val query = uri.rawQuery.orEmpty().split('&').mapNotNull { part ->
+                val pair = part.split('=', limit = 2)
+                if (pair.size == 2) pair[0] to URLDecoder.decode(pair[1], "UTF-8") else null
+            }.toMap()
+            VlessProfile(
+                id = raw.hashCode().toString(),
+                name = URLDecoder.decode(uri.fragment.orEmpty().ifBlank { uri.host }, "UTF-8"),
+                uuid = uuid,
+                host = uri.host!!,
+                port = if (uri.port > 0) uri.port else 443,
+                security = query["security"].orEmpty(),
+                network = query["type"].orEmpty().ifBlank { query["network"].orEmpty().ifBlank { "tcp" } },
+                type = query["type"].orEmpty().ifBlank { "tcp" },
+                path = query["path"].orEmpty(),
+                sni = query["sni"].orEmpty().ifBlank { query["host"].orEmpty() },
+                fingerprint = query["fp"].orEmpty(),
+                publicKey = query["pbk"].orEmpty(),
+                shortId = query["sid"].orEmpty(),
+                raw = raw
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
 }
 
 object ProfileStore {
     fun save(context: Context, subscription: String, profiles: List<VlessProfile>) {
-        val encoded = profiles.joinToString("\n") { it.raw }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_SUB_URL, subscription)
-            .putString(KEY_PROFILES, encoded)
+            .putString(KEY_PROFILES, profiles.joinToString("\n") { it.raw })
             .apply()
     }
-    fun subscription(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_SUB_URL, "").orEmpty()
-    fun profiles(context: Context) = VlessParser.parseSubscription(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROFILES, "").orEmpty())
+
+    fun subscription(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getString(KEY_SUB_URL, "").orEmpty()
+
+    fun profiles(context: Context): List<VlessProfile> = VlessParser.parseSubscription(
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROFILES, "").orEmpty()
+    )
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun LabudaApp(activity: MainActivity) {
     var profiles by remember { mutableStateOf(ProfileStore.profiles(activity)) }
     var subscriptionUrl by remember { mutableStateOf(ProfileStore.subscription(activity)) }
+    var selected by remember { mutableStateOf<VlessProfile?>(profiles.firstOrNull()) }
     var showImport by remember { mutableStateOf(profiles.isEmpty()) }
-    var selected by remember { mutableStateOf<VlessProfile?>(null) }
     var connected by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        if (profiles.isNotEmpty()) {
-            profiles = profiles.map { p -> p.copy(latencyMs = ping(p.host, p.port)) }
-        }
+        if (profiles.isNotEmpty()) profiles = profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }
     }
 
     MaterialTheme {
@@ -192,124 +200,176 @@ private fun LabudaApp(activity: MainActivity) {
                 ImportScreen(
                     url = subscriptionUrl,
                     onUrlChange = { subscriptionUrl = it },
+                    busy = busy,
+                    message = message,
+                    onQr = { activity.startActivity(Intent(activity, QrScannerActivity::class.java)) },
+                    onClipboard = {
+                        val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
+                        if (text.isNotBlank()) subscriptionUrl = text
+                    },
                     onImport = {
                         busy = true
                         message = ""
-                        kotlinx.coroutines.GlobalScope.launch(Dispatchers.Main) {
+                        scope.launch {
                             val result = importSubscription(activity, subscriptionUrl)
                             busy = false
                             result.onSuccess { list ->
                                 profiles = list
+                                selected = list.firstOrNull()
                                 ProfileStore.save(activity, subscriptionUrl, list)
                                 showImport = false
                                 message = "Импортировано серверов: ${list.size}"
                             }.onFailure { message = it.message ?: "Не удалось импортировать подписку" }
                         }
-                    },
-                    onQr = { activity.startActivityForResult(Intent(activity, QrScannerActivity::class.java), 700) },
-                    busy = busy,
-                    message = message
+                    }
                 )
             } else {
                 MainScreen(
                     profiles = profiles,
                     selected = selected,
                     connected = connected,
+                    busy = busy,
+                    message = message,
                     onSelect = { selected = it },
                     onConnect = {
                         if (connected) { activity.stopVpn(); connected = false }
-                        else { activity.startVpn(); connected = true }
+                        else if (selected != null) { activity.startVpn(); connected = true }
                     },
                     onRefresh = {
+                        if (subscriptionUrl.isBlank()) return@MainScreen
                         busy = true
-                        kotlinx.coroutines.GlobalScope.launch(Dispatchers.Main) {
+                        scope.launch {
                             val result = importSubscription(activity, subscriptionUrl)
                             busy = false
-                            result.onSuccess { list -> profiles = list; ProfileStore.save(activity, subscriptionUrl, list) }
-                                .onFailure { message = it.message ?: "Ошибка обновления" }
+                            result.onSuccess { list ->
+                                profiles = list
+                                selected = list.firstOrNull()
+                                ProfileStore.save(activity, subscriptionUrl, list)
+                                message = "Подписка обновлена: ${list.size} серверов"
+                            }.onFailure { message = it.message ?: "Ошибка обновления" }
                         }
                     },
                     onImport = { showImport = true },
-                    onFavorite = { p -> profiles = profiles.map { if (it.id == p.id) it.copy(favorite = !it.favorite) else it }; ProfileStore.save(activity, subscriptionUrl, profiles) },
-                    busy = busy,
-                    message = message
+                    onFavorite = { profile ->
+                        profiles = profiles.map { if (it.id == profile.id) it.copy(favorite = !it.favorite) else it }
+                        ProfileStore.save(activity, subscriptionUrl, profiles)
+                    }
                 )
             }
         }
     }
 }
 
-@androidx.compose.runtime.Composable
-private fun ImportScreen(url: String, onUrlChange: (String) -> Unit, onImport: () -> Unit, onQr: () -> Unit, busy: Boolean, message: String) {
-    var clipboardText by remember { mutableStateOf("") }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+@Composable
+private fun ImportScreen(
+    url: String,
+    onUrlChange: (String) -> Unit,
+    busy: Boolean,
+    message: String,
+    onQr: () -> Unit,
+    onClipboard: () -> Unit,
+    onImport: () -> Unit
+) {
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
         Text("LBD", fontSize = 56.sp, fontWeight = FontWeight.Black, letterSpacing = (-4).sp)
         Text("LABUDA", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text("VLESS subscription client", color = Color.Gray)
         Spacer(Modifier.height(32.dp))
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
             Column(Modifier.padding(20.dp)) {
                 Text("Добавить подписку", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(url, onUrlChange, Modifier.fillMaxWidth(), label = { Text("URL подписки или VLESS") }, singleLine = true)
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = onUrlChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("URL подписки или VLESS") },
+                    singleLine = true
+                )
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onQr, Modifier.weight(1f)) { Icon(Icons.Outlined.QrCodeScanner, null); Spacer(Modifier.size(6.dp)); Text("QR") }
-                    Button(onClick = {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboardText = cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-                        if (clipboardText.isNotBlank()) onUrlChange(clipboardText)
-                    }, Modifier.weight(1f)) { Icon(Icons.Filled.ContentPaste, null); Spacer(Modifier.size(6.dp)); Text("Буфер") }
+                    Button(onClick = onQr, Modifier.weight(1f)) {
+                        Icon(Icons.Outlined.QrCodeScanner, null)
+                        Spacer(Modifier.size(6.dp))
+                        Text("QR")
+                    }
+                    Button(onClick = onClipboard, Modifier.weight(1f)) {
+                        Icon(Icons.Filled.ContentPaste, null)
+                        Spacer(Modifier.size(6.dp))
+                        Text("Буфер")
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
-                Button(onClick = onImport, Modifier.fillMaxWidth(), enabled = !busy && url.isNotBlank()) { Text(if (busy) "Загрузка…" else "Импортировать всю подписку") }
+                Button(onClick = onImport, Modifier.fillMaxWidth(), enabled = !busy && url.isNotBlank()) {
+                    Text(if (busy) "Загрузка…" else "Импортировать всю подписку")
+                }
                 if (message.isNotBlank()) Text(message, Modifier.padding(top = 10.dp), color = Color.Gray)
             }
         }
     }
 }
 
-@androidx.compose.runtime.Composable
-private fun MainScreen(profiles: List<VlessProfile>, selected: VlessProfile?, connected: Boolean, onSelect: (VlessProfile) -> Unit, onConnect: () -> Unit, onRefresh: () -> Unit, onImport: () -> Unit, onFavorite: (VlessProfile) -> Unit, busy: Boolean, message: String) {
+@Composable
+private fun MainScreen(
+    profiles: List<VlessProfile>,
+    selected: VlessProfile?,
+    connected: Boolean,
+    busy: Boolean,
+    message: String,
+    onSelect: (VlessProfile) -> Unit,
+    onConnect: () -> Unit,
+    onRefresh: () -> Unit,
+    onImport: () -> Unit,
+    onFavorite: (VlessProfile) -> Unit
+) {
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { Text("LABUDA", fontSize = 28.sp, fontWeight = FontWeight.Black); Text("Private • Fast • Simple", color = Color.Gray) }
-            IconButton(onClick = onRefresh) { Icon(Icons.Filled.Refresh, "Обновить") }
+            Text("LABUDA", fontSize = 28.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+            IconButton(onClick = onRefresh, enabled = !busy) { Icon(Icons.Filled.Refresh, "Обновить") }
             IconButton(onClick = onImport) { Icon(Icons.Filled.Add, "Добавить") }
-            IconButton(onClick = {}) { Icon(Icons.Filled.Settings, "Настройки") }
         }
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
             Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(150.dp).background(if (connected) Color(0xFF111111) else Color(0xFFEAEAEA), CircleShape), contentAlignment = Alignment.Center) {
-                    Text(if (connected) "LBD" else "LBD", fontSize = 42.sp, fontWeight = FontWeight.Black, color = if (connected) Color.White else Color.Black)
+                    Text("LBD", fontSize = 42.sp, fontWeight = FontWeight.Black, color = if (connected) Color.White else Color.Black)
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(if (connected) "Лабуда подключена" else "Лабуда отключена", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(selected?.name ?: "Выберите сервер", color = Color.Gray)
                 Spacer(Modifier.height(14.dp))
-                Button(onClick = onConnect, Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) { Text(if (connected) "Отключить" else "Подключить", fontSize = 17.sp) }
+                Button(onClick = onConnect, Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), enabled = selected != null) {
+                    Text(if (connected) "Отключить" else "Подключить", fontSize = 17.sp)
+                }
             }
         }
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Серверы (${profiles.size})", fontSize = 19.sp, fontWeight = FontWeight.Bold, Modifier.weight(1f))
+            Text("Серверы (${profiles.size})", fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (busy) Text("Обновление…", color = Color.Gray)
         }
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
             items(profiles, key = { it.id }) { profile ->
-                Card(Modifier.fillMaxWidth().clickable { onSelect(profile) }, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (selected?.id == profile.id) Color(0xFFE9E9E9) else Color.White)) {
+                Card(
+                    Modifier.fillMaxWidth().clickable { onSelect(profile) },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = if (selected?.id == profile.id) Color(0xFFE9E9E9) else Color.White)
+                ) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(profile.name, fontWeight = FontWeight.Bold)
                             Text("${profile.host}:${profile.port} • ${profile.security.ifBlank { "auto" }} • ${profile.network}", color = Color.Gray, fontSize = 12.sp)
                         }
                         Icon(Icons.Filled.Speed, null, tint = Color.Gray)
-                        Text(profile.latencyMs?.let { " ${it} ms" } ?: " —", fontSize = 12.sp)
-                        IconButton(onClick = { onFavorite(profile) }) { Icon(Icons.Filled.Star, null, tint = if (profile.favorite) Color.Black else Color.LightGray) }
+                        Text(profile.latencyMs?.let { " $it ms" } ?: " —", fontSize = 12.sp)
+                        IconButton(onClick = { onFavorite(profile) }) {
+                            Icon(Icons.Filled.Star, null, tint = if (profile.favorite) Color.Black else Color.LightGray)
+                        }
                     }
                 }
             }
@@ -323,19 +383,29 @@ private suspend fun importSubscription(context: Context, source: String): Result
         val value = source.trim()
         val body = if (value.startsWith("http://") || value.startsWith("https://")) {
             val connection = URL(value).openConnection() as HttpURLConnection
-            connection.connectTimeout = 12_000
-            connection.readTimeout = 20_000
-            connection.setRequestProperty("User-Agent", "LABUDA/0.1")
-            connection.inputStream.bufferedReader().use { it.readText() }
+            try {
+                connection.connectTimeout = 12_000
+                connection.readTimeout = 20_000
+                connection.setRequestProperty("User-Agent", "LABUDA/0.1")
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } finally {
+                connection.disconnect()
+            }
         } else value
         val list = VlessParser.parseSubscription(body)
         if (list.isEmpty()) error("Подписка загружена, но VLESS-профили не найдены")
         Result.success(list)
-    } catch (e: Exception) { Result.failure(e) }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
 }
 
-private fun ping(host: String, port: Int): Long? = try {
-    val start = System.nanoTime()
-    Socket().use { it.connect(InetSocketAddress(host, port), 2500) }
-    (System.nanoTime() - start) / 1_000_000
-} catch (_: Exception) { null }
+private fun ping(host: String, port: Int): Long? {
+    return try {
+        val start = System.nanoTime()
+        Socket().use { it.connect(InetSocketAddress(host, port), 2500) }
+        (System.nanoTime() - start) / 1_000_000
+    } catch (_: Exception) {
+        null
+    }
+}
