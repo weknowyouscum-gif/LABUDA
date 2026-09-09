@@ -133,12 +133,12 @@ data class VlessProfile(
 )
 
 object VlessParser {
-    private val VLESS_PATTERN = Regex("vless://[^\\s]+", RegexOption.IGNORE_CASE)
+    private val VLESS_PATTERN = Regex("vless://[^\\s\\\"<>]+", RegexOption.IGNORE_CASE)
 
     fun parseSubscription(input: String): List<VlessProfile> {
         val decoded = decodeSubscription(input.trim())
         return VLESS_PATTERN.findAll(decoded)
-            .map { it.value.trim().trimEnd(',', ';') }
+            .map { it.value.trim().trimEnd(',', ';', '\\r', '\\n') }
             .mapNotNull { parseUri(it) }
             .distinctBy { it.raw }
             .mapIndexed { index, profile -> profile.copy(id = "${profile.host}:${profile.port}:$index") }
@@ -146,12 +146,13 @@ object VlessParser {
     }
 
     private fun decodeSubscription(value: String): String {
-        if (value.contains("vless://", ignoreCase = true)) return value
-        val normalized = value.replace("\\s".toRegex(), "").replace('-', '+').replace('_', '/')
+        val normalizedValue = value.replace("\\\\r", "\\n").replace("\\\\n", "\\n")
+        if (normalizedValue.contains("vless://", ignoreCase = true)) return normalizedValue
+        val normalized = normalizedValue.replace("\\s".toRegex(), "").replace('-', '+').replace('_', '/')
         return try {
             val decoded = String(android.util.Base64.decode(normalized, android.util.Base64.DEFAULT), Charsets.UTF_8)
-            if (decoded.contains("vless://", ignoreCase = true)) decoded else value
-        } catch (_: Exception) { value }
+            if (decoded.contains("vless://", ignoreCase = true)) decoded else normalizedValue
+        } catch (_: Exception) { normalizedValue }
     }
 
     private fun parseUri(raw: String): VlessProfile? {
@@ -189,7 +190,7 @@ object ProfileStore {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val editor = prefs.edit()
             .putString(KEY_SUB_URL, subscription)
-            .putString(KEY_PROFILES, profiles.joinToString("\\n") { it.raw })
+            .putString(KEY_PROFILES, profiles.joinToString("\n") { it.raw })
         selectedId?.let { editor.putString(KEY_SELECTED_ID, it) }
         editor.apply()
     }
@@ -233,6 +234,7 @@ private fun LabudaApp(activity: MainActivity) {
             showImport = true
         }
         if (profiles.isNotEmpty()) profiles = profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }
+        if (profiles.isNotEmpty() && selected == null) selected = profiles.first()
     }
 
     LaunchedEffect(Unit) {
@@ -289,10 +291,12 @@ private fun LabudaApp(activity: MainActivity) {
                         connected = false
                     },
                     onConnect = {
+                        val target = selected ?: profiles.firstOrNull()
                         if (connected) {
                             activity.stopVpn()
-                        } else if (selected != null) {
-                            ProfileStore.select(activity, selected!!)
+                        } else if (target != null) {
+                            if (selected == null) selected = target
+                            ProfileStore.select(activity, target)
                             activity.startVpn()
                         }
                     },
@@ -374,7 +378,7 @@ private fun MainScreen(
                 Text(if (connected) "Лабуда подключена" else "Лабуда отключена", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(selected?.name ?: "Выберите сервер", color = Color.Gray)
                 Spacer(Modifier.height(14.dp))
-                Button(onClick = onConnect, Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), enabled = selected != null) { Text(if (connected) "Отключить" else "Подключить", fontSize = 17.sp) }
+                Button(onClick = onConnect, Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), enabled = selected != null || profiles.isNotEmpty()) { Text(if (connected) "Отключить" else "Подключить", fontSize = 17.sp) }
             }
         }
         Spacer(Modifier.height(16.dp))
