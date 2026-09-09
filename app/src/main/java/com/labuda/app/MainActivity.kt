@@ -195,6 +195,25 @@ object ProfileStore {
         editor.apply()
     }
 
+    fun addSubscription(context: Context, subscription: String, newProfiles: List<VlessProfile>, selectedId: String? = null) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val oldProfiles = profiles(context)
+        val mergedProfiles = (oldProfiles + newProfiles).distinctBy { it.raw }
+        val oldSubscriptions = prefs.getStringSet("subscription_urls", emptySet()).orEmpty()
+        val mergedSubscriptions = LinkedHashSet<String>().apply {
+            addAll(oldSubscriptions)
+            val old = prefs.getString(KEY_SUB_URL, "").orEmpty().trim()
+            if (old.isNotBlank()) add(old)
+            if (subscription.isNotBlank()) add(subscription.trim())
+        }
+        prefs.edit()
+            .putString(KEY_SUB_URL, subscription.trim())
+            .putStringSet("subscription_urls", mergedSubscriptions)
+            .putString(KEY_PROFILES, mergedProfiles.joinToString("\n") { it.raw })
+            .apply()
+        selectedId?.let { select(context, newProfiles.firstOrNull { p -> p.id == it } ?: newProfiles.firstOrNull() ?: return) }
+    }
+
     fun subscription(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         .getString(KEY_SUB_URL, "").orEmpty()
 
@@ -218,7 +237,7 @@ object ProfileStore {
 @Composable
 private fun LabudaApp(activity: MainActivity) {
     var profiles by remember { mutableStateOf(ProfileStore.profiles(activity)) }
-    var subscriptionUrl by remember { mutableStateOf(ProfileStore.subscription(activity)) }
+    var subscriptionUrl by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(ProfileStore.selectedProfile(activity)) }
     var showImport by remember { mutableStateOf(profiles.isEmpty()) }
     var connected by remember { mutableStateOf(false) }
@@ -268,11 +287,14 @@ private fun LabudaApp(activity: MainActivity) {
                             val result = importSubscription(activity, subscriptionUrl)
                             busy = false
                             result.onSuccess { list ->
-                                profiles = list
-                                selected = list.firstOrNull()
-                                ProfileStore.save(activity, subscriptionUrl, list, selected?.id)
+                                val newSubscription = subscriptionUrl.trim()
+                                val merged = (profiles + list).distinctBy { it.raw }
+                                profiles = merged
+                                selected = list.firstOrNull() ?: selected ?: merged.firstOrNull()
+                                ProfileStore.addSubscription(activity, newSubscription, list, selected?.id)
+                                subscriptionUrl = ""
                                 showImport = false
-                                message = "Импортировано серверов: ${list.size}"
+                                message = "Добавлено серверов: ${list.size}. Старые подписки сохранены."
                             }.onFailure { message = it.message ?: "Не удалось импортировать подписку" }
                         }
                     }
@@ -301,23 +323,25 @@ private fun LabudaApp(activity: MainActivity) {
                         }
                     },
                     onRefresh = {
-                        if (subscriptionUrl.isBlank()) return@MainScreen
+                        val source = ProfileStore.subscription(activity)
+                        if (source.isBlank()) return@MainScreen
                         busy = true
                         scope.launch {
-                            val result = importSubscription(activity, subscriptionUrl)
+                            val result = importSubscription(activity, source)
                             busy = false
                             result.onSuccess { list ->
-                                profiles = list
-                                selected = list.firstOrNull { it.id == selected?.id } ?: list.firstOrNull()
-                                ProfileStore.save(activity, subscriptionUrl, list, selected?.id)
+                                val refreshed = list
+                                profiles = refreshed
+                                selected = refreshed.firstOrNull { it.id == selected?.id } ?: refreshed.firstOrNull()
+                                ProfileStore.save(activity, source, refreshed, selected?.id)
                                 message = "Подписка обновлена: ${list.size} серверов"
                             }.onFailure { message = it.message ?: "Ошибка обновления" }
                         }
                     },
-                    onImport = { showImport = true },
+                    onImport = { subscriptionUrl = ""; showImport = true },
                     onFavorite = { profile ->
                         profiles = profiles.map { if (it.id == profile.id) it.copy(favorite = !it.favorite) else it }
-                        ProfileStore.save(activity, subscriptionUrl, profiles, selected?.id)
+                        ProfileStore.save(activity, ProfileStore.subscription(activity), profiles, selected?.id)
                     }
                 )
             }
