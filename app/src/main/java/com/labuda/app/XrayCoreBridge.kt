@@ -24,7 +24,9 @@ class XrayCoreBridge(private val context: Context) {
     fun start(config: String, tunFd: Int): Result<Unit> = runCatching {
         if (initialized.compareAndSet(false, true)) {
             Seq.setContext(context.applicationContext)
-            Libv2ray.initCoreEnv(context.filesDir.absolutePath, "labuda")
+            // AndroidLibXrayLite requires the XUDP environment base key to be exactly 32 bytes.
+            // Keep it ASCII-only so its byte length is deterministic.
+            Libv2ray.initCoreEnv(context.filesDir.absolutePath, XUDP_BASE_KEY)
             controller = Libv2ray.newCoreController(callback)
         }
         controller?.startLoop(config, tunFd) ?: error("Xray controller is not initialized")
@@ -38,5 +40,8 @@ class XrayCoreBridge(private val context: Context) {
 
     fun isRunning(): Boolean = controller?.isRunning == true
 
-    companion object { private const val TAG = "LABUDA-XRAY" }
+    companion object {
+        private const val TAG = "LABUDA-XRAY"
+        private const val XUDP_BASE_KEY = "LABUDA-XUDP-BASEKEY-20260909-001"
+    }
 }
