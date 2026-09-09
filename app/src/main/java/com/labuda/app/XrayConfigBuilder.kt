@@ -62,13 +62,13 @@ object XrayConfigBuilder {
             "tag":"tun",
             "port":0,
             "protocol":"tun",
-            "settings":{"name":"labuda0","MTU":1500,"userLevel":8},
-            "sniffing":{"enabled":true,"destOverride":["http","tls"]}
+            "settings":{"name":"labuda0","mtu":1500,"stack":"gvisor","userLevel":8},
+            "sniffing":{"enabled":true,"destOverride":["http","tls","quic"]}
           }],
           "outbounds":[{
             "tag":"proxy",
             "protocol":"vless",
-            "settings":{"vnext":[{"address":"${escape(profile.host)}","port":${profile.port},"users":[$user}]},
+            "settings":{"vnext":[{"address":"${escape(profile.host)}","port":${profile.port},"users":[$user]}]},
             "streamSettings":$stream
           },{"tag":"direct","protocol":"freedom"},{"tag":"block","protocol":"blackhole"}],
           "routing":{"domainStrategy":"AsIs","rules":[{"type":"field","inboundTag":["tun"],"outboundTag":"proxy"}]}
