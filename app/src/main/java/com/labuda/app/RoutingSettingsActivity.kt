@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -69,15 +70,18 @@ class RoutingSettingsActivity : ComponentActivity() {
     }
 }
 
-private fun drawableToBitmap(drawable: Drawable): Bitmap {
-    val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 96
-    val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 96
-    val size = maxOf(width, height).coerceAtMost(192)
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+private fun drawableToBitmap(source: Drawable): Bitmap {
+    val drawable = source.mutate()
+    val width = drawable.intrinsicWidth.takeIf { it > 0 } ?: 96
+    val height = drawable.intrinsicHeight.takeIf { it > 0 } ?: 96
+    val canvasSize = maxOf(width, height).coerceAtMost(192).coerceAtLeast(48)
+    val bitmap = Bitmap.createBitmap(canvasSize, canvasSize, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    val left = (size - width.coerceAtMost(size)) / 2
-    val top = (size - height.coerceAtMost(size)) / 2
-    drawable.setBounds(left, top, left + width.coerceAtMost(size), top + height.coerceAtMost(size))
+    val drawWidth = width.coerceAtMost(canvasSize)
+    val drawHeight = height.coerceAtMost(canvasSize)
+    val left = (canvasSize - drawWidth) / 2
+    val top = (canvasSize - drawHeight) / 2
+    drawable.setBounds(left, top, left + drawWidth, top + drawHeight)
     drawable.draw(canvas)
     return bitmap
 }
@@ -86,13 +90,15 @@ private fun loadApps(context: Context): List<RoutingApp> {
     val pm = context.packageManager
     return pm.getInstalledApplications(PackageManager.GET_META_DATA)
         .filter { it.packageName != context.packageName }
-        .map {
-            RoutingApp(
-                pm.getApplicationLabel(it).toString(),
-                it.packageName,
-                (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                drawableToBitmap(pm.getApplicationIcon(it))
-            )
+        .mapNotNull { app ->
+            runCatching {
+                RoutingApp(
+                    pm.getApplicationLabel(app).toString(),
+                    app.packageName,
+                    (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                    drawableToBitmap(pm.getApplicationIcon(app))
+                )
+            }.getOrNull()
         }
         .sortedBy { it.label.lowercase() }
 }
@@ -141,7 +147,7 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     items(visible, key = { it.packageName }) { app ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Image(bitmap = app.icon.asImageBitmap(), contentDescription = app.label, modifier = Modifier.size(40.dp).padding(4.dp))
+                            Image(bitmap = app.icon.asImageBitmap(), contentDescription = app.label, contentScale = ContentScale.Fit, modifier = Modifier.size(40.dp).padding(4.dp))
                             Checkbox(checked = selected.contains(app.packageName), onCheckedChange = { checked -> selected = if (checked) selected + app.packageName else selected - app.packageName })
                             Column(Modifier.weight(1f)) { Text(app.label, fontSize = 14.sp); Text(app.packageName, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
