@@ -1,7 +1,9 @@
 package com.labuda.app
 
+import android.app.Activity
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -39,28 +41,39 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private const val PREFS = "labuda"
+const val MODE_ALL = "all"
+const val MODE_BYPASS = "bypass"
+const val MODE_TUNNEL = "tunnel"
+private const val ROUTING_PREFS = "labuda"
 private const val KEY_ROUTING_MODE = "routing_mode"
 private const val KEY_ROUTING_APPS = "routing_apps"
-private const val MODE_ALL = "all"
-private const val MODE_BYPASS = "bypass"
-private const val MODE_TUNNEL = "tunnel"
 
-data class RoutingApp(val packageName: String, val label: String, val system: Boolean)
+data class RoutingApp(val label: String, val packageName: String, val system: Boolean)
 
 object RoutingStore {
-    fun mode(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_ROUTING_MODE, MODE_ALL).orEmpty().let { when (it) { MODE_ALL -> MODE_ALL; MODE_TUNNEL -> MODE_TUNNEL; else -> MODE_BYPASS } }
-    fun selectedApps(context: Context): Set<String> = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet(KEY_ROUTING_APPS, emptySet()).orEmpty()
-    fun save(context: Context, mode: String, apps: Set<String>) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ROUTING_MODE, mode).putStringSet(KEY_ROUTING_APPS, apps).apply()
+    fun mode(context: Context): String = context.getSharedPreferences(ROUTING_PREFS, Context.MODE_PRIVATE).getString(KEY_ROUTING_MODE, MODE_ALL) ?: MODE_ALL
+    fun selectedApps(context: Context): Set<String> = context.getSharedPreferences(ROUTING_PREFS, Context.MODE_PRIVATE).getStringSet(KEY_ROUTING_APPS, emptySet()) ?: emptySet()
+    fun save(context: Context, mode: String, apps: Set<String>) { context.getSharedPreferences(ROUTING_PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ROUTING_MODE, mode).putStringSet(KEY_ROUTING_APPS, apps).apply() }
 }
 
 class RoutingSettingsActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { RoutingScreen(this) } }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { RoutingScreen(this) }
+    }
+}
+
+private fun loadApps(context: Context): List<RoutingApp> {
+    val pm = context.packageManager
+    return pm.getInstalledApplications(PackageManager.GET_META_DATA)
+        .filter { it.packageName != context.packageName }
+        .map { RoutingApp(pm.getApplicationLabel(it).toString(), it.packageName, (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0) }
+        .sortedBy { it.label.lowercase() }
 }
 
 @Composable
-private fun RoutingScreen(context: Context) {
+private fun RoutingScreen(activity: RoutingSettingsActivity) {
+    val context = activity
     var mode by remember { mutableStateOf(RoutingStore.mode(context)) }
     var selected by remember { mutableStateOf(RoutingStore.selectedApps(context)) }
     var filter by remember { mutableStateOf("all") }
@@ -75,7 +88,7 @@ private fun RoutingScreen(context: Context) {
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().padding(12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { finish() }) { Icon(Icons.Filled.ArrowBack, "Назад") }
+                    IconButton(onClick = { (context as Activity).finish() }) { Icon(Icons.Filled.ArrowBack, "Назад") }
                     Text("Настройки • Маршрутизация", fontSize = 21.sp)
                 }
                 Text("Режим маршрутизации", fontSize = 16.sp)
@@ -107,15 +120,8 @@ private fun RoutingScreen(context: Context) {
                         }
                     }
                 }
-                Button(onClick = { RoutingStore.save(context, mode, selected); finish() }, modifier = Modifier.fillMaxWidth().height(44.dp)) { Text("Сохранить") }
+                Button(onClick = { RoutingStore.save(context, mode, selected); (context as Activity).finish() }, modifier = Modifier.fillMaxWidth().height(44.dp)) { Text("Сохранить") }
             }
         }
     }
-}
-
-private fun loadApps(context: Context): List<RoutingApp> {
-    val pm = context.packageManager
-    return pm.getInstalledApplications(0).filter { it.packageName != context.packageName }.map {
-        RoutingApp(it.packageName, it.loadLabel(pm).toString().ifBlank { it.packageName }, (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0 || (it.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0)
-    }.sortedBy { it.label.lowercase() }
 }
