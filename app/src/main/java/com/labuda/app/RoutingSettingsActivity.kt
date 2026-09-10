@@ -1,8 +1,6 @@
 package com.labuda.app
 
 import android.content.Context
-import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -41,6 +39,7 @@ private const val PREFS = "labuda"
 private const val KEY_ROUTING_MODE = "routing_mode"
 private const val KEY_ROUTING_APPS = "routing_apps"
 
+private const val MODE_ALL = "all"
 private const val MODE_BYPASS = "bypass"
 private const val MODE_TUNNEL = "tunnel"
 
@@ -48,8 +47,8 @@ data class RoutingApp(val packageName: String, val label: String)
 
 object RoutingStore {
     fun mode(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_ROUTING_MODE, MODE_BYPASS).orEmpty()
-        .let { if (it == MODE_TUNNEL) MODE_TUNNEL else MODE_BYPASS }
+        .getString(KEY_ROUTING_MODE, MODE_ALL).orEmpty()
+        .let { when (it) { MODE_ALL -> MODE_ALL; MODE_TUNNEL -> MODE_TUNNEL; else -> MODE_BYPASS } }
 
     fun selectedApps(context: Context): Set<String> = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         .getStringSet(KEY_ROUTING_APPS, emptySet()).orEmpty()
@@ -82,47 +81,59 @@ private fun RoutingScreen(context: Context) {
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().padding(18.dp)) {
+            Column(Modifier.fillMaxSize().padding(14.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { (context as? ComponentActivity)?.finish() }) {
                         Icon(Icons.Filled.ArrowBack, "Назад")
                     }
-                    Text("Маршрутизация", fontSize = 25.sp)
+                    Text("Маршрутизация", fontSize = 23.sp)
                 }
-                Spacer(Modifier.height(10.dp))
-                Text("Режим", fontSize = 18.sp)
                 Spacer(Modifier.height(6.dp))
+                Text("Режим", fontSize = 17.sp)
+                Spacer(Modifier.height(4.dp))
 
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors()) {
-                    Column(Modifier.padding(8.dp)) {
+                    Column(Modifier.padding(6.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = mode == MODE_BYPASS, onClick = { mode = MODE_BYPASS })
+                            RadioButton(selected = mode == MODE_ALL, onClick = { mode = MODE_ALL })
                             Column(Modifier.weight(1f)) {
-                                Text("1. Обход", fontSize = 16.sp)
-                                Text("Выбранные приложения обходят туннель", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("1. Весь трафик через VPN", fontSize = 15.sp)
+                                Text("Все приложения работают через туннель", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             }
                         }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = mode == MODE_TUNNEL, onClick = { mode = MODE_TUNNEL })
                             Column(Modifier.weight(1f)) {
-                                Text("2. Туннель", fontSize = 16.sp)
-                                Text("Только выбранные приложения идут через туннель", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("2. Только выбранные приложения", fontSize = 15.sp)
+                                Text("Отмеченные приложения работают через VPN", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = mode == MODE_BYPASS, onClick = { mode = MODE_BYPASS })
+                            Column(Modifier.weight(1f)) {
+                                Text("3. Выбранные приложения обходят VPN", fontSize = 15.sp)
+                                Text("Отмеченные приложения работают напрямую", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(14.dp))
-                Text("Приложения", fontSize = 18.sp)
-                Text(
-                    if (mode == MODE_BYPASS) "Отмеченные приложения будут обходить VPN" else "Отмеченные приложения будут работать через VPN",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 Spacer(Modifier.height(8.dp))
+                Text("Приложения", fontSize = 17.sp)
+                Text(
+                    when (mode) {
+                        MODE_ALL -> "При этом режиме выбор приложений не используется"
+                        MODE_BYPASS -> "Отмеченные приложения будут обходить VPN"
+                        else -> "Отмеченные приложения будут работать через VPN"
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.height(4.dp))
 
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     items(apps, key = { it.packageName }) { app ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -132,7 +143,7 @@ private fun RoutingScreen(context: Context) {
                                     selectedApps = if (checked) selectedApps + app.packageName else selectedApps - app.packageName
                                 }
                             )
-                            Text(app.label, Modifier.weight(1f))
+                            Text(app.label, Modifier.weight(1f), fontSize = 14.sp)
                         }
                     }
                 }
@@ -142,7 +153,7 @@ private fun RoutingScreen(context: Context) {
                         RoutingStore.save(context, mode, selectedApps)
                         (context as? ComponentActivity)?.finish()
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) { Text("Сохранить") }
             }
         }
