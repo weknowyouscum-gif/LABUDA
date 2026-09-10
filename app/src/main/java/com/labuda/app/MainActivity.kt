@@ -160,11 +160,11 @@ object SubscriptionStore {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val raw = prefs.getString(KEY_SUBSCRIPTIONS, null)
         if (!raw.isNullOrBlank()) return runCatching { decode(JSONArray(raw)) }.getOrDefault(emptyList())
         val url = prefs.getString(KEY_SUB_URL, "").orEmpty(); val profiles = VlessParser.parseSubscription(prefs.getString(KEY_PROFILES, "").orEmpty())
-        return if (profiles.isEmpty()) emptyList() else listOf(SubscriptionInfo(url.hashCode().toString(), url, "Подписка 1", profiles = profiles))
+        return if (profiles.isEmpty()) emptyList() else listOf(SubscriptionInfo(url.hashCode().toString(), url, "Подписка", profiles = profiles))
     }
     fun save(context: Context, list: List<SubscriptionInfo>) {
         val arr = JSONArray(); list.forEach { s ->
-            val o = JSONObject().put("id", s.id).put("url", s.url).put("title", s.title).put("comment", s.comment)
+            val o = JSONObject().put("id", s.id).put("url", s.url).put("title", "Подписка").put("comment", s.comment)
                 .put("total", s.totalBytes ?: -1L).put("used", s.usedBytes).put("expire", s.expireAt ?: -1L)
             val a = JSONArray(); s.profiles.forEach { a.put(it.raw) }; o.put("profiles", a); arr.put(o)
         }
@@ -173,7 +173,7 @@ object SubscriptionStore {
     }
     private fun decode(arr: JSONArray): List<SubscriptionInfo> = buildList {
         for (i in 0 until arr.length()) { val o = arr.getJSONObject(i); val a = o.optJSONArray("profiles") ?: JSONArray(); val p = buildList { for (j in 0 until a.length()) VlessParser.parseSubscription(a.optString(j)).firstOrNull()?.let { add(it) } }
-            add(SubscriptionInfo(o.optString("id"), o.optString("url"), o.optString("title", "Подписка"), o.optString("comment"), o.optLong("total", -1).takeIf { it >= 0 }, o.optLong("used", 0), o.optLong("expire", -1).takeIf { it > 0 }, p)) }
+            add(SubscriptionInfo(o.optString("id"), o.optString("url"), "Подписка", o.optString("comment"), o.optLong("total", -1).takeIf { it >= 0 }, o.optLong("used", 0), o.optLong("expire", -1).takeIf { it > 0 }, p)) }
     }
 }
 
@@ -190,10 +190,10 @@ private fun LabudaApp(activity: MainActivity) {
 
     LaunchedEffect(Unit) {
         val qr = activity.consumeQrResult(); if (qr.isNotBlank()) { importUrl = qr; showImport = true }
-        subs = subs.map { s -> s.copy(profiles = s.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }) }
+        subs = subs.map { s -> s.copy(title = "Подписка", profiles = s.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }) }
         selected = selected?.let { old -> subs.flatMap { it.profiles }.firstOrNull { it.raw == old.raw } } ?: subs.flatMap { it.profiles }.firstOrNull(); save()
     }
-    LaunchedEffect(Unit) { while (true) { connected = prefs.getBoolean(KEY_VPN_RUNNING, false); val rx=prefs.getLong(VpnStats.KEY_RX,0); val tx=prefs.getLong(VpnStats.KEY_TX,0); stats = VpnStatsSnapshot(rx + tx, rx, tx, prefs.getLong(VpnStats.KEY_RX_SPEED,0), prefs.getLong(VpnStats.KEY_TX_SPEED,0), prefs.getString(VpnStats.KEY_COMMENT, "").orEmpty()); delay(500) } }
+    LaunchedEffect(Unit) { while (true) { connected = prefs.getBoolean(KEY_VPN_RUNNING, false); val rx=prefs.getLong(VpnStats.KEY_RX,0); val tx=prefs.getLong(VpnStats.KEY_TX,0); val storedComment=prefs.getString(VpnStats.KEY_COMMENT, "").orEmpty(); val selectedComment=subs.firstOrNull{s->s.profiles.any{it.raw==selected?.raw}}?.comment.orEmpty(); stats = VpnStatsSnapshot(rx + tx, rx, tx, prefs.getLong(VpnStats.KEY_RX_SPEED,0), prefs.getLong(VpnStats.KEY_TX_SPEED,0), storedComment.ifBlank{selectedComment}); delay(500) } }
 
     MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
         Surface(Modifier.fillMaxSize()) {
@@ -204,7 +204,7 @@ private fun LabudaApp(activity: MainActivity) {
                     importSubscription(activity, importUrl).onSuccess { p ->
                         val url = importUrl.trim()
                         if (subs.any { it.url.trim() == url }) { message = "Подписка уже добавлена" } else {
-                            val s = SubscriptionInfo(url.hashCode().toString(), url, p.title.ifBlank { "Подписка ${subs.size + 1}" }, p.comment, p.totalBytes, p.usedBytes, p.expireAt, p.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) })
+                            val s = SubscriptionInfo(url.hashCode().toString(), url, "Подписка", p.comment, p.totalBytes, p.usedBytes, p.expireAt, p.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) })
                             subs = subs + s; selected = s.profiles.firstOrNull(); selected?.let { ProfileStore.select(activity, it) }; save(); importUrl = ""; showImport = false; message = "Добавлено серверов: ${s.profiles.size}"
                         }
                     }.onFailure { message = it.message ?: "Не удалось импортировать подписку" }; busy = false
@@ -214,7 +214,7 @@ private fun LabudaApp(activity: MainActivity) {
                 { p -> if (connected) activity.stopVpn(); selected = p; ProfileStore.select(activity,p); connected=false },
                 { if (connected) activity.stopVpn() else activity.startVpn() },
                 {
-                    busy=true; scope.launch { subs = subs.map { s -> importSubscription(activity,s.url).getOrNull()?.let { p -> s.copy(title=p.title.ifBlank{s.title},comment=p.comment.ifBlank{s.comment},totalBytes=p.totalBytes?:s.totalBytes,usedBytes=p.usedBytes,expireAt=p.expireAt?:s.expireAt,profiles=p.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}) } ?: s.copy(profiles=s.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}) }; selected=selected?.let{x->subs.flatMap{it.profiles}.firstOrNull{it.raw==x.raw}}?:subs.flatMap{it.profiles}.firstOrNull(); save(); busy=false; message="Подписки обновлены" }
+                    busy=true; scope.launch { subs = subs.map { s -> importSubscription(activity,s.url).getOrNull()?.let { p -> s.copy(title="Подписка",comment=p.comment.ifBlank{s.comment},totalBytes=p.totalBytes?:s.totalBytes,usedBytes=p.usedBytes,expireAt=p.expireAt?:s.expireAt,profiles=p.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}) } ?: s.copy(title="Подписка",profiles=s.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}) }; selected=selected?.let{x->subs.flatMap{it.profiles}.firstOrNull{it.raw==x.raw}}?:subs.flatMap{it.profiles}.firstOrNull(); save(); busy=false; message="Подписки обновлены" }
                 }, { importUrl=""; showImport=true }, { p -> subs=subs.map{s->s.copy(profiles=s.profiles.map{if(it.raw==p.raw)it.copy(favorite=!it.favorite)else it})};save() })
         }
     }
@@ -235,8 +235,8 @@ private fun MainScreen(subs:List<SubscriptionInfo>,selected:VlessProfile?,connec
     }
 }
 
-@Composable private fun SubscriptionHeader(s:SubscriptionInfo){Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){Column(Modifier.padding(horizontal=10.dp,vertical=7.dp)){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(s.title,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(if(s.totalBytes==null)"∞" else "Осталось ${formatBytes((s.totalBytes-s.usedBytes).coerceAtLeast(0))}",fontSize=12.sp)};Text("Окончание: ${s.expireAt?.let{formatExpiry(it)}?:"Без срока"}",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);if(s.comment.isNotBlank())Text(s.comment,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1)}}}
-@Composable private fun ServerCard(p:VlessProfile,selected:VlessProfile?,onSelect:(VlessProfile)->Unit,onFavorite:(VlessProfile)->Unit){Card(Modifier.fillMaxWidth().clickable{onSelect(p)},shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=if(selected?.id==p.id)MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)){Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(p.name,fontWeight=FontWeight.Bold);Text("${p.network.uppercase()}",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp);Text(p.latencyMs?.let{"Пинг: $it мс"}?:"Пинг: —",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp)};IconButton({onFavorite(p)}){Icon(if(p.favorite)Icons.Filled.Star else Icons.Filled.Settings,"Избранное")}}}}
+@Composable private fun SubscriptionHeader(s:SubscriptionInfo){Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){Column(Modifier.padding(horizontal=10.dp,vertical=7.dp)){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Подписка",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(if(s.totalBytes==null)"∞" else "Осталось ${formatBytes((s.totalBytes-s.usedBytes).coerceAtLeast(0))}",fontSize=12.sp)};Text("Окончание: ${s.expireAt?.let{formatExpiry(it)}?:"Без срока"}",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);if(s.comment.isNotBlank())Text(s.comment,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1)}}}
+@Composable private fun ServerCard(p:VlessProfile,selected:VlessProfile?,onSelect:(VlessProfile)->Unit,onFavorite:(VlessProfile)->Unit){Card(Modifier.fillMaxWidth().clickable{onSelect(p)},shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=if(selected?.id==p.id)MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)){Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){Text(p.name,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(p.latencyMs?.let{"$it мс"}?:"—",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp)}}}
 @Composable private fun VpnStatsCard(s:VpnStatsSnapshot){Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){Column(Modifier.padding(horizontal=12.dp,vertical=7.dp)){Text("Статистика",fontSize=15.sp,fontWeight=FontWeight.Bold);Text("Трафик: ${formatBytes(s.trafficBytes)}",fontSize=13.sp);if(s.comment.isNotBlank())Text("Комментарий: ${s.comment}",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp,maxLines=1);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("Вход: ${formatBytes(s.rxBytes)}",fontSize=12.sp);Text("Выход: ${formatBytes(s.txBytes)}",fontSize=12.sp)}}}}
 
 private suspend fun importSubscription(context:Context,input:String):Result<SubscriptionPayload> = withContext(Dispatchers.IO){runCatching{val source=input.trim();if(source.isBlank())error("Пустой источник подписки");var title="";var comment="";var total:Long?=null;var used=0L;var expire:Long?=null;val content=if(source.startsWith("http://")||source.startsWith("https://")){val c=URL(source).openConnection() as HttpURLConnection;c.connectTimeout=15000;c.readTimeout=20000;c.requestMethod="GET";val h=c.headerFields.entries.associate{(k,v)->(k?:"").lowercase() to v?.firstOrNull().orEmpty()};title=h["profile-title"].orEmpty().ifBlank{h["content-disposition"].orEmpty().substringAfter("filename=","").trim('"','\'')};comment=h["profile-comment"].orEmpty().ifBlank{h["profile-description"].orEmpty()};parseUserInfo(h["subscription-userinfo"].orEmpty())?.let{used=it.used;total=it.total;expire=it.expire};c.inputStream.bufferedReader().use{it.readText()}.also{c.disconnect()}}else source;val profiles=VlessParser.parseSubscription(content);if(profiles.isEmpty())error("В подписке не найдено корректных VLESS-конфигураций");SubscriptionPayload(profiles,title.ifBlank{profiles.first().name},comment,total,used,expire)}}
