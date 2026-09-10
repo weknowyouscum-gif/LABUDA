@@ -118,6 +118,7 @@ class MainActivity : ComponentActivity() {
     fun startVpn() { val intent = VpnService.prepare(this); if (intent != null) vpnPermission.launch(intent) else startVpnService() }
     private fun startVpnService() { startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_START)) }
     fun stopVpn() { startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_STOP)) }
+    fun switchVpn() { startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_SWITCH)) }
 }
 
 object VlessParser {
@@ -164,7 +165,8 @@ object SubscriptionStore {
     }
     fun save(context: Context, list: List<SubscriptionInfo>) {
         val arr = JSONArray(); list.forEach { s ->
-            val o = JSONObject().put("id", s.id).put("url", s.url).put("title", "Подписка").put("comment", s.comment)
+            val title = s.title.trim().takeIf { it.isNotBlank() } ?: "Подписка"
+            val o = JSONObject().put("id", s.id).put("url", s.url).put("title", title).put("comment", s.comment)
                 .put("total", s.totalBytes ?: -1L).put("used", s.usedBytes).put("expire", s.expireAt ?: -1L)
             val a = JSONArray(); s.profiles.forEach { a.put(it.raw) }; o.put("profiles", a); arr.put(o)
         }
@@ -173,7 +175,7 @@ object SubscriptionStore {
     }
     private fun decode(arr: JSONArray): List<SubscriptionInfo> = buildList {
         for (i in 0 until arr.length()) { val o = arr.getJSONObject(i); val a = o.optJSONArray("profiles") ?: JSONArray(); val p = buildList { for (j in 0 until a.length()) VlessParser.parseSubscription(a.optString(j)).firstOrNull()?.let { add(it) } }
-            add(SubscriptionInfo(o.optString("id"), o.optString("url"), "Подписка", o.optString("comment"), o.optLong("total", -1).takeIf { it >= 0 }, o.optLong("used", 0), o.optLong("expire", -1).takeIf { it > 0 }, p)) }
+            add(SubscriptionInfo(o.optString("id"), o.optString("url"), o.optString("title").ifBlank { "Подписка" }, o.optString("comment"), o.optLong("total", -1).takeIf { it >= 0 }, o.optLong("used", 0), o.optLong("expire", -1).takeIf { it > 0 }, p)) }
     }
 }
 
@@ -190,7 +192,10 @@ private fun LabudaApp(activity: MainActivity) {
 
     LaunchedEffect(Unit) {
         val qr = activity.consumeQrResult(); if (qr.isNotBlank()) { importUrl = qr; showImport = true }
-        subs = subs.map { s -> s.copy(title = "Подписка", profiles = s.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }) }
+        val updated = withContext(Dispatchers.IO) {
+            subs.map { s -> s.copy(profiles = s.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }) }
+        }
+        subs = updated
         selected = selected?.let { old -> subs.flatMap { it.profiles }.firstOrNull { it.raw == old.raw } } ?: subs.flatMap { it.profiles }.firstOrNull(); save()
     }
     LaunchedEffect(Unit) { while (true) { connected = prefs.getBoolean(KEY_VPN_RUNNING, false); val rx=prefs.getLong(VpnStats.KEY_RX,0); val tx=prefs.getLong(VpnStats.KEY_TX,0); val storedComment=prefs.getString(VpnStats.KEY_COMMENT, "").orEmpty(); val selectedComment=subs.firstOrNull{s->s.profiles.any{it.raw==selected?.raw}}?.comment.orEmpty(); stats = VpnStatsSnapshot(rx + tx, rx, tx, prefs.getLong(VpnStats.KEY_RX_SPEED,0), prefs.getLong(VpnStats.KEY_TX_SPEED,0), storedComment.ifBlank{selectedComment}); delay(500) } }
@@ -204,20 +209,40 @@ private fun LabudaApp(activity: MainActivity) {
                     importSubscription(activity, importUrl).onSuccess { p ->
                         val url = importUrl.trim()
                         if (subs.any { it.url.trim() == url }) { message = "Подписка уже добавлена" } else {
-                            val s = SubscriptionInfo(url.hashCode().toString(), url, "Подписка", p.comment, p.totalBytes, p.usedBytes, p.expireAt, p.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) })
-                            subs = subs + s; selected = s.profiles.firstOrNull(); selected?.let { ProfileStore.select(activity, it) }; save(); importUrl = ""; showImport = false; message = "Добавлено серверов: ${s.profiles.size}"
+                            val title = cleanSubscriptionTitle(p.title, p.profiles.firstOrNull()?.name)
+                            val s = SubscriptionInfo(url.hashCode().toString(), url, title, p.comment, p.totalBytes, p.usedBytes, p.expireAt,
+                                p.profiles.map { it.copy(latencyMs = null) })
+                            val pinged = withContext(Dispatchers.IO) { s.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) } }
+                            val ready = s.copy(profiles = pinged)
+                            subs = subs + ready; selected = ready.profiles.firstOrNull(); selected?.let { ProfileStore.select(activity, it) }; save(); importUrl = ""; showImport = false; message = "Добавлено серверов: ${ready.profiles.size}"
                         }
                     }.onFailure { message = it.message ?: "Не удалось импортировать подписку" }; busy = false
                 }
             } else MainScreen(subs, selected, connected, busy, message, stats, dark, { dark = it; prefs.edit().putBoolean(KEY_DARK_THEME,it).apply() },
                 { activity.startActivity(Intent(activity, RoutingSettingsActivity::class.java)) },
-                { p -> if (connected) activity.stopVpn(); selected = p; ProfileStore.select(activity,p); connected=false },
+                { p ->
+                    selected = p
+                    ProfileStore.select(activity,p)
+                    if (connected) activity.switchVpn()
+                },
                 { if (connected) activity.stopVpn() else activity.startVpn() },
                 {
-                    busy=true; scope.launch { subs = subs.map { s -> importSubscription(activity,s.url).getOrNull()?.let { p -> s.copy(title="Подписка",comment=p.comment.ifBlank{s.comment},totalBytes=p.totalBytes?:s.totalBytes,usedBytes=p.usedBytes,expireAt=p.expireAt?:s.expireAt,profiles=p.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}) } ?: s.copy(title="Подписка",profiles=s.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}) }; selected=selected?.let{x->subs.flatMap{it.profiles}.firstOrNull{it.raw==x.raw}}?:subs.flatMap{it.profiles}.firstOrNull(); save(); busy=false; message="Подписки обновлены" }
+                    busy=true; scope.launch { subs = subs.map { s -> importSubscription(activity,s.url).getOrNull()?.let { p -> s.copy(title=cleanSubscriptionTitle(p.title, p.profiles.firstOrNull()?.name),comment=p.comment.ifBlank{s.comment},totalBytes=p.totalBytes?:s.totalBytes,usedBytes=p.usedBytes,expireAt=p.expireAt?:s.expireAt,profiles=withContext(Dispatchers.IO){p.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}}) } ?: s }; selected=selected?.let{x->subs.flatMap{it.profiles}.firstOrNull{it.raw==x.raw}}?:subs.flatMap{it.profiles}.firstOrNull(); save(); busy=false; message="Подписки обновлены" }
                 }, { importUrl=""; showImport=true }, { p -> subs=subs.map{s->s.copy(profiles=s.profiles.map{if(it.raw==p.raw)it.copy(favorite=!it.favorite)else it})};save() })
         }
     }
+}
+
+private fun cleanSubscriptionTitle(title: String?, fallback: String?): String {
+    val value = title.orEmpty().trim()
+    if (value.isBlank()) return fallback.orEmpty().ifBlank { "Подписка" }
+    val compact = value.replace("\\s".toRegex(), "")
+    val looksBase64 = compact.length >= 12 && compact.matches(Regex("[A-Za-z0-9+/=_-]+"))
+    if (looksBase64) {
+        val decoded = runCatching { String(android.util.Base64.decode(compact.replace('-', '+').replace('_', '/'), android.util.Base64.DEFAULT), Charsets.UTF_8) }.getOrNull()
+        if (decoded.isNullOrBlank() || !decoded.any { it.isLetter() } || decoded.contains("vless://", true)) return fallback.orEmpty().ifBlank { "Подписка" }
+    }
+    return value
 }
 
 @Composable
@@ -229,13 +254,13 @@ private fun ImportScreen(url:String,onUrl:(String)->Unit,busy:Boolean,message:St
 private fun MainScreen(subs:List<SubscriptionInfo>,selected:VlessProfile?,connected:Boolean,busy:Boolean,message:String,stats:VpnStatsSnapshot,dark:Boolean,onDark:(Boolean)->Unit,onSettings:()->Unit,onSelect:(VlessProfile)->Unit,onConnect:()->Unit,onRefresh:()->Unit,onImport:()->Unit,onFavorite:(VlessProfile)->Unit){
     Column(Modifier.fillMaxSize().padding(horizontal=12.dp).padding(top=32.dp)){
         Row(Modifier.fillMaxWidth().padding(top=8.dp),verticalAlignment=Alignment.CenterVertically){Text("LABUDA",fontSize=24.sp,fontWeight=FontWeight.Black,modifier=Modifier.weight(1f));Icon(Icons.Filled.DarkMode,"Тёмная тема",Modifier.size(18.dp));Switch(dark,onDark);IconButton(onSettings){Icon(Icons.Filled.Settings,"Настройки")};IconButton(onRefresh,enabled=!busy){Icon(Icons.Filled.Refresh,"Обновить")};IconButton(onImport){Icon(Icons.Filled.Add,"Добавить")}}
-        Spacer(Modifier.height(5.dp));Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(10.dp),horizontalAlignment=Alignment.CenterHorizontally){Box(Modifier.size(82.dp).background(MaterialTheme.colorScheme.onSurfaceVariant,CircleShape),contentAlignment=Alignment.Center){Text("LBD",fontSize=28.sp,fontWeight=FontWeight.Black,color=MaterialTheme.colorScheme.surface)};Spacer(Modifier.height(5.dp));Text(if(connected)"Лабуда подключена" else "Лабуда отключена",fontSize=17.sp,fontWeight=FontWeight.Bold);Text(selected?.name?:"Выберите сервер",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp);Spacer(Modifier.height(6.dp));Button(onConnect,Modifier.fillMaxWidth().height(42.dp),shape=RoundedCornerShape(14.dp),enabled=selected!=null||subs.any{it.profiles.isNotEmpty()}){Text(if(connected)"Отключить" else "Подключить",fontSize=15.sp)}}}
+        Spacer(Modifier.height(5.dp));Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(10.dp),horizontalAlignment=Alignment.CenterHorizontally){Box(Modifier.size(82.dp).background(MaterialTheme.colorScheme.onSurfaceVariant,CircleShape),contentAlignment=Alignment.Center){Text("LBD",fontSize=28.sp,fontWeight=FontWeight.Black,color=MaterialTheme.colorScheme.surface)};Spacer(Modifier.height(5.dp));Text(if(connected)"Лабуда подключена" else "Лабуда отключена",fontSize=17.sp,fontWeight=FontWeight.Bold);Spacer(Modifier.height(6.dp));Button(onConnect,Modifier.fillMaxWidth().height(42.dp),shape=RoundedCornerShape(14.dp),enabled=selected!=null||subs.any{it.profiles.isNotEmpty()}){Text(if(connected)"Отключить" else "Подключить",fontSize=15.sp)}}}
         Spacer(Modifier.height(5.dp));VpnStatsCard(stats);Spacer(Modifier.height(6.dp));Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Подписки (${subs.size})",fontSize=17.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));if(busy)Text("Обновление…",color=MaterialTheme.colorScheme.onSurfaceVariant)};Spacer(Modifier.height(4.dp))
         LazyColumn(verticalArrangement=Arrangement.spacedBy(7.dp)){subs.forEach{s->item(key="sub-${s.id}"){SubscriptionHeader(s)};items(s.profiles,key={"${s.id}:${it.raw}"}){p->ServerCard(p,selected,onSelect,onFavorite)}}};if(message.isNotBlank())Text(message,Modifier.padding(vertical=6.dp),color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-@Composable private fun SubscriptionHeader(s:SubscriptionInfo){Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){Column(Modifier.padding(horizontal=10.dp,vertical=7.dp)){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Подписка",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(if(s.totalBytes==null)"∞" else "Осталось ${formatBytes((s.totalBytes-s.usedBytes).coerceAtLeast(0))}",fontSize=12.sp)};Text("Окончание: ${s.expireAt?.let{formatExpiry(it)}?:"Без срока"}",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);if(s.comment.isNotBlank())Text(s.comment,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1)}}}
+@Composable private fun SubscriptionHeader(s:SubscriptionInfo){Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){Column(Modifier.padding(horizontal=10.dp,vertical=7.dp)){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(s.title,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(if(s.totalBytes==null)"∞" else "Осталось ${formatBytes((s.totalBytes-s.usedBytes).coerceAtLeast(0))}",fontSize=12.sp)};Text("Окончание: ${s.expireAt?.let{formatExpiry(it)}?:"Без срока"}",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);if(s.comment.isNotBlank())Text(s.comment,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1)}}}
 @Composable private fun ServerCard(p:VlessProfile,selected:VlessProfile?,onSelect:(VlessProfile)->Unit,onFavorite:(VlessProfile)->Unit){Card(Modifier.fillMaxWidth().clickable{onSelect(p)},shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=if(selected?.id==p.id)MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)){Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){Text(p.name,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(p.latencyMs?.let{"$it мс"}?:"—",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp)}}}
 @Composable private fun VpnStatsCard(s:VpnStatsSnapshot){Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){Column(Modifier.padding(horizontal=12.dp,vertical=7.dp)){Text("Статистика",fontSize=15.sp,fontWeight=FontWeight.Bold);Text("Трафик: ${formatBytes(s.trafficBytes)}",fontSize=13.sp);if(s.comment.isNotBlank())Text("Комментарий: ${s.comment}",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp,maxLines=1);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("Вход: ${formatBytes(s.rxBytes)}",fontSize=12.sp);Text("Выход: ${formatBytes(s.txBytes)}",fontSize=12.sp)}}}}
 
