@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -123,10 +121,10 @@ class MainActivity : ComponentActivity() {
 }
 
 object VlessParser {
-    private val PATTERN = Regex("vless://[^\\s\\\"<>]+", RegexOption.IGNORE_CASE)
+    private val PATTERN = Regex("""vless://[^\s\"<>]+""", RegexOption.IGNORE_CASE)
     fun parseSubscription(input: String): List<VlessProfile> {
         val decoded = decode(input.trim())
-        return PATTERN.findAll(decoded).map { it.value.trim().trimEnd(',', ';', '\\r', '\\n') }
+        return PATTERN.findAll(decoded).map { it.value.trim().trimEnd(',', ';', '\r', '\n') }
             .mapNotNull { parseUri(it) }.distinctBy { it.raw }.mapIndexed { i, p -> p.copy(id = "${p.host}:${p.port}:$i") }.toList()
     }
     private fun decode(value: String): String {
@@ -135,15 +133,19 @@ object VlessParser {
         val normalized = v.replace("\\s".toRegex(), "").replace('-', '+').replace('_', '/')
         return try { String(android.util.Base64.decode(normalized, android.util.Base64.DEFAULT), Charsets.UTF_8).takeIf { it.contains("vless://", true) } ?: v } catch (_: Exception) { v }
     }
-    private fun parseUri(raw: String): VlessProfile? = try {
-        val uri = URI(raw); val user = uri.userInfo ?: return null; val uuid = user.substringBefore(':')
-        if (uuid.isBlank() || uri.host.isNullOrBlank()) return null
-        val q = uri.rawQuery.orEmpty().split('&').mapNotNull { p -> p.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to URLDecoder.decode(it[1], "UTF-8") } }.toMap()
-        VlessProfile(raw.hashCode().toString(), URLDecoder.decode(uri.fragment.orEmpty().ifBlank { uri.host }, "UTF-8"), uuid, uri.host!!,
-            if (uri.port > 0) uri.port else 443, q["security"].orEmpty(), q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
-            q["type"].orEmpty().ifBlank { "tcp" }, q["path"].orEmpty(), q["sni"].orEmpty().ifBlank { q["host"].orEmpty() },
-            q["fp"].orEmpty(), q["pbk"].orEmpty(), q["sid"].orEmpty(), raw)
-    } catch (_: Exception) { null }
+    private fun parseUri(raw: String): VlessProfile? {
+        return try {
+            val uri = URI(raw)
+            val user = uri.userInfo ?: return null
+            val uuid = user.substringBefore(':')
+            if (uuid.isBlank() || uri.host.isNullOrBlank()) return null
+            val q = uri.rawQuery.orEmpty().split('&').mapNotNull { p -> p.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to URLDecoder.decode(it[1], "UTF-8") } }.toMap()
+            VlessProfile(raw.hashCode().toString(), URLDecoder.decode(uri.fragment.orEmpty().ifBlank { uri.host }, "UTF-8"), uuid, uri.host!!,
+                if (uri.port > 0) uri.port else 443, q["security"].orEmpty(), q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
+                q["type"].orEmpty().ifBlank { "tcp" }, q["path"].orEmpty(), q["sni"].orEmpty().ifBlank { q["host"].orEmpty() },
+                q["fp"].orEmpty(), q["pbk"].orEmpty(), q["sid"].orEmpty(), raw)
+        } catch (_: Exception) { null }
+    }
 }
 
 object ProfileStore {
@@ -191,7 +193,7 @@ private fun LabudaApp(activity: MainActivity) {
         subs = subs.map { s -> s.copy(profiles = s.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }) }
         selected = selected?.let { old -> subs.flatMap { it.profiles }.firstOrNull { it.raw == old.raw } } ?: subs.flatMap { it.profiles }.firstOrNull(); save()
     }
-    LaunchedEffect(Unit) { while (true) { connected = prefs.getBoolean(KEY_VPN_RUNNING, false); stats = VpnStatsSnapshot(prefs.getLong(VpnStats.KEY_RX,0), prefs.getLong(VpnStats.KEY_RX,0), prefs.getLong(VpnStats.KEY_TX,0), prefs.getLong(VpnStats.KEY_RX_SPEED,0), prefs.getLong(VpnStats.KEY_TX_SPEED,0), prefs.getString(VpnStats.KEY_COMMENT, "").orEmpty()); delay(500) } }
+    LaunchedEffect(Unit) { while (true) { connected = prefs.getBoolean(KEY_VPN_RUNNING, false); val rx=prefs.getLong(VpnStats.KEY_RX,0); val tx=prefs.getLong(VpnStats.KEY_TX,0); stats = VpnStatsSnapshot(rx + tx, rx, tx, prefs.getLong(VpnStats.KEY_RX_SPEED,0), prefs.getLong(VpnStats.KEY_TX_SPEED,0), prefs.getString(VpnStats.KEY_COMMENT, "").orEmpty()); delay(500) } }
 
     MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
         Surface(Modifier.fillMaxSize()) {
@@ -225,7 +227,7 @@ private fun ImportScreen(url:String,onUrl:(String)->Unit,busy:Boolean,message:St
 
 @Composable
 private fun MainScreen(subs:List<SubscriptionInfo>,selected:VlessProfile?,connected:Boolean,busy:Boolean,message:String,stats:VpnStatsSnapshot,dark:Boolean,onDark:(Boolean)->Unit,onSettings:()->Unit,onSelect:(VlessProfile)->Unit,onConnect:()->Unit,onRefresh:()->Unit,onImport:()->Unit,onFavorite:(VlessProfile)->Unit){
-    Column(Modifier.fillMaxSize().padding(horizontal=12.dp).padding(top=WindowInsets.statusBars.asPaddingValues().calculateTopPadding())){
+    Column(Modifier.fillMaxSize().padding(horizontal=12.dp).padding(top=32.dp)){
         Row(Modifier.fillMaxWidth().padding(top=8.dp),verticalAlignment=Alignment.CenterVertically){Text("LABUDA",fontSize=24.sp,fontWeight=FontWeight.Black,modifier=Modifier.weight(1f));Icon(Icons.Filled.DarkMode,"Тёмная тема",Modifier.size(18.dp));Switch(dark,onDark);IconButton(onSettings){Icon(Icons.Filled.Settings,"Настройки")};IconButton(onRefresh,enabled=!busy){Icon(Icons.Filled.Refresh,"Обновить")};IconButton(onImport){Icon(Icons.Filled.Add,"Добавить")}}
         Spacer(Modifier.height(5.dp));Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(10.dp),horizontalAlignment=Alignment.CenterHorizontally){Box(Modifier.size(82.dp).background(MaterialTheme.colorScheme.onSurfaceVariant,CircleShape),contentAlignment=Alignment.Center){Text("LBD",fontSize=28.sp,fontWeight=FontWeight.Black,color=MaterialTheme.colorScheme.surface)};Spacer(Modifier.height(5.dp));Text(if(connected)"Лабуда подключена" else "Лабуда отключена",fontSize=17.sp,fontWeight=FontWeight.Bold);Text(selected?.name?:"Выберите сервер",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp);Spacer(Modifier.height(6.dp));Button(onConnect,Modifier.fillMaxWidth().height(42.dp),shape=RoundedCornerShape(14.dp),enabled=selected!=null||subs.any{it.profiles.isNotEmpty()}){Text(if(connected)"Отключить" else "Подключить",fontSize=15.sp)}}}
         Spacer(Modifier.height(5.dp));VpnStatsCard(stats);Spacer(Modifier.height(6.dp));Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Подписки (${subs.size})",fontSize=17.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));if(busy)Text("Обновление…",color=MaterialTheme.colorScheme.onSurfaceVariant)};Spacer(Modifier.height(4.dp))
@@ -234,7 +236,7 @@ private fun MainScreen(subs:List<SubscriptionInfo>,selected:VlessProfile?,connec
 }
 
 @Composable private fun SubscriptionHeader(s:SubscriptionInfo){Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){Column(Modifier.padding(horizontal=10.dp,vertical=7.dp)){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(s.title,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(if(s.totalBytes==null)"∞" else "Осталось ${formatBytes((s.totalBytes-s.usedBytes).coerceAtLeast(0))}",fontSize=12.sp)};Text("Окончание: ${s.expireAt?.let{formatExpiry(it)}?:"Без срока"}",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);if(s.comment.isNotBlank())Text(s.comment,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1)}}}
-@Composable private fun ServerCard(p:VlessProfile,selected:VlessProfile?,onSelect:(VlessProfile)->Unit,onFavorite:(VlessProfile)->Unit){Card(Modifier.fillMaxWidth().clickable{onSelect(p)},shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=if(selected?.id==p.id)MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)){Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(p.name,fontWeight=FontWeight.Bold);Text("${p.host}:${p.port} • ${p.network.uppercase()}",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp);Text(p.latencyMs?.let{"Пинг: $it мс"}?:"Пинг: —",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp)};IconButton({onFavorite(p)}){Icon(if(p.favorite)Icons.Filled.Star else Icons.Filled.Settings,"Избранное")}}}}
+@Composable private fun ServerCard(p:VlessProfile,selected:VlessProfile?,onSelect:(VlessProfile)->Unit,onFavorite:(VlessProfile)->Unit){Card(Modifier.fillMaxWidth().clickable{onSelect(p)},shape=RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=if(selected?.id==p.id)MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)){Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(p.name,fontWeight=FontWeight.Bold);Text("${p.network.uppercase()}",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp);Text(p.latencyMs?.let{"Пинг: $it мс"}?:"Пинг: —",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp)};IconButton({onFavorite(p)}){Icon(if(p.favorite)Icons.Filled.Star else Icons.Filled.Settings,"Избранное")}}}}
 @Composable private fun VpnStatsCard(s:VpnStatsSnapshot){Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp)){Column(Modifier.padding(horizontal=12.dp,vertical=7.dp)){Text("Статистика",fontSize=15.sp,fontWeight=FontWeight.Bold);Text("Трафик: ${formatBytes(s.trafficBytes)}",fontSize=13.sp);if(s.comment.isNotBlank())Text("Комментарий: ${s.comment}",color=MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp,maxLines=1);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("Вход: ${formatBytes(s.rxBytes)}",fontSize=12.sp);Text("Выход: ${formatBytes(s.txBytes)}",fontSize=12.sp)}}}}
 
 private suspend fun importSubscription(context:Context,input:String):Result<SubscriptionPayload> = withContext(Dispatchers.IO){runCatching{val source=input.trim();if(source.isBlank())error("Пустой источник подписки");var title="";var comment="";var total:Long?=null;var used=0L;var expire:Long?=null;val content=if(source.startsWith("http://")||source.startsWith("https://")){val c=URL(source).openConnection() as HttpURLConnection;c.connectTimeout=15000;c.readTimeout=20000;c.requestMethod="GET";val h=c.headerFields.entries.associate{(k,v)->(k?:"").lowercase() to v?.firstOrNull().orEmpty()};title=h["profile-title"].orEmpty().ifBlank{h["content-disposition"].orEmpty().substringAfter("filename=","").trim('"','\'')};comment=h["profile-comment"].orEmpty().ifBlank{h["profile-description"].orEmpty()};parseUserInfo(h["subscription-userinfo"].orEmpty())?.let{used=it.used;total=it.total;expire=it.expire};c.inputStream.bufferedReader().use{it.readText()}.also{c.disconnect()}}else source;val profiles=VlessParser.parseSubscription(content);if(profiles.isEmpty())error("В подписке не найдено корректных VLESS-конфигураций");SubscriptionPayload(profiles,title.ifBlank{profiles.first().name},comment,total,used,expire)}}
