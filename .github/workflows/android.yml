@@ -36,6 +36,8 @@ jobs:
         run: python3 scripts/fix_050.py
       - name: Normalize server names
         run: python3 scripts/clean_server_names.py
+      - name: Apply 0.51 Kotlin build fix
+        run: python3 scripts/fix_051.py
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
       - name: Rename APK to LABUDA version format
