@@ -10,11 +10,18 @@ private fun normalizeServerName(name: String, subscriptionTitle: String): String
         .map { it.trim() }
         .filter { it.isNotBlank() && it.length > 1 }
         .distinctBy { it.lowercase() }
+    val separators = listOf(" | ", " • ", " · ", " / ", " - ", " – ", " — ", ":")
     for (title in titles) {
-        result = result.replace(Regex("(?i)\\s*(?:[|•·:/\\-–—])\\s*" + Regex.escape(title) + "\\s*$"), "")
-        result = result.replace(Regex("(?i)^" + Regex.escape(title) + "\\s*(?:[|•·:/\\-–—])\\s*"), "")
-        result = result.replace(Regex("(?i)^" + Regex.escape(title) + "\\s+"), "")
-        result = result.replace(Regex("(?i)\\s+" + Regex.escape(title) + "\\s*$"), "")
+        for (separator in separators) {
+            result = result.removeSuffix(separator + title).trim()
+            result = result.removePrefix(title + separator).trim()
+        }
+        if (result.endsWith(" $title", ignoreCase = true)) {
+            result = result.dropLast(title.length + 1).trim()
+        }
+        if (result.startsWith("$title ", ignoreCase = true)) {
+            result = result.drop(title.length + 1).trim()
+        }
     }
     return result.trim().trim('|', '•', '·', ':', '/', '-', '–', '—').trim()
 }
