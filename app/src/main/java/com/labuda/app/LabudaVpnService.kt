@@ -21,6 +21,7 @@ class LabudaVpnService : VpnService() {
     companion object {
         const val ACTION_START = "com.labuda.app.START"
         const val ACTION_STOP = "com.labuda.app.STOP"
+        const val ACTION_SWITCH = "com.labuda.app.SWITCH"
         private const val CHANNEL = "labuda_vpn"
         private const val NOTIFICATION_ID = 101
         private const val PREFS = "labuda"
@@ -41,7 +42,11 @@ class LabudaVpnService : VpnService() {
     @Volatile private var stopping = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) { ACTION_STOP -> stopTunnel(); ACTION_START -> startTunnel() }
+        when (intent?.action) {
+            ACTION_STOP -> stopTunnel()
+            ACTION_START -> startTunnel()
+            ACTION_SWITCH -> switchTunnel()
+        }
         return START_STICKY
     }
 
@@ -58,11 +63,52 @@ class LabudaVpnService : VpnService() {
         val measurements=profiles.map{it to probe(it)}
         val ordered=measurements.sortedBy{it.second?:Long.MAX_VALUE}.map{it.first}
         Log.i(TAG,"Server priority: ${measurements.sortedBy{it.second?:Long.MAX_VALUE}.joinToString{"${it.first.name}=${it.second?:-1}ms"}}")
-        for(profile in ordered){if(stopping)return;if(startTunnelForProfile(profile)){currentProfile=profile;startHealthMonitor();return}}
+        for(profile in ordered){if(stopping)return;val created=startTunnelForProfile(profile);if(created){currentProfile=profile;startHealthMonitor();return}}
         fail("Не удалось подключиться ни к одному серверу")
     }
 
-    private fun startTunnelForProfile(profile:VlessProfile):Boolean{
+    private fun switchTunnel() {
+        if (stopping) return
+        val target = ProfileStore.selectedProfile(this) ?: return
+        if (currentProfile?.raw == target.raw && xray?.isRunning() == true) return
+        val oldTun = tun
+        val oldXray = xray
+        val oldProfile = currentProfile
+        monitorThread?.interrupt()
+        monitorThread = null
+        Log.i(TAG, "Seamless server switch: ${oldProfile?.name ?: "none"} -> ${target.name}")
+        val created = createTunnel(target)
+        if (created == null) {
+            Log.e(TAG, "Server switch failed; keeping current VPN connection")
+            if (oldXray?.isRunning() == true) startHealthMonitor()
+            return
+        }
+        val newTun = created.first
+        val newXray = created.second
+        xray = newXray
+        tun = newTun
+        currentProfile = target
+        setState(true, null)
+        VpnStats.setComment(this, "Подключено • ${target.name}")
+        VpnStats.startMonitor(this)
+        updateNotification("LBD переключена • ${target.name}")
+        runCatching { oldXray?.stop() }
+        runCatching { oldTun?.close() }
+        startHealthMonitor()
+    }
+
+    private fun startTunnelForProfile(profile:VlessProfile):Boolean {
+        val created = createTunnel(profile) ?: return false
+        tun = created.first
+        xray = created.second
+        setState(true,null)
+        VpnStats.setComment(this,"Подключено • ${profile.name}")
+        VpnStats.startMonitor(this)
+        updateNotification("LBD подключена • ${profile.name}")
+        return true
+    }
+
+    private fun createTunnel(profile: VlessProfile): Pair<ParcelFileDescriptor, XrayCoreBridge>? {
         val prefs=getSharedPreferences(PREFS,MODE_PRIVATE)
         val bypassPrivate=prefs.getBoolean(KEY_BYPASS_PRIVATE,true)
         val routingMode=prefs.getString(KEY_ROUTING_MODE,MODE_ALL).orEmpty().let{when(it){MODE_ALL->MODE_ALL;MODE_TUNNEL->MODE_TUNNEL;else->MODE_BYPASS}}
@@ -70,18 +116,18 @@ class LabudaVpnService : VpnService() {
         val builder=Builder().setSession("LABUDA LBD").setMtu(1500).setBlocking(false).setMetered(false).addAddress("10.10.0.2",32).addAddress("fd10:10:10::2",128).addRoute("0.0.0.0",0).addRoute("::",0).addDnsServer("1.1.1.1").addDnsServer("8.8.8.8")
         excludeProxyEndpointRoutes(builder,profile.host);if(bypassPrivate)excludePrivateRoutes(builder)
         if(routingMode==MODE_TUNNEL) selectedApps.forEach{pkg->runCatching{builder.addAllowedApplication(pkg)}} else {runCatching{builder.addDisallowedApplication(packageName)};if(routingMode==MODE_BYPASS)selectedApps.forEach{pkg->runCatching{builder.addDisallowedApplication(pkg)}}}
-        tun=try{builder.establish()}catch(e:Exception){Log.e(TAG,"TUN establish failed for ${profile.host}: ${e.message}");null}
-        val descriptor=tun?:return false
-        val bridge=XrayCoreBridge(this);val result=bridge.start(XrayConfigBuilder.build(profile,bypassPrivate),descriptor.fd)
-        if(result.isFailure||!bridge.isRunning()){Log.e(TAG,"Xray failed for ${profile.host}: ${result.exceptionOrNull()?.message?:"not running"}");bridge.stop();descriptor.close();tun=null;return false}
-        xray=bridge
-        if(!waitForSystemVpn()){bridge.stop();xray=null;descriptor.close();tun=null;return false}
-        setUnderlyingNetworks(null);setState(true,null);VpnStats.setComment(this,"Подключено • ${profile.name}");VpnStats.startMonitor(this);updateNotification("LBD подключена • ${profile.name}");return true
+        val newTun=try{builder.establish()}catch(e:Exception){Log.e(TAG,"TUN establish failed for ${profile.host}: ${e.message}");null}
+        val descriptor=newTun?:return null
+        val bridge=XrayCoreBridge(this)
+        val result=bridge.start(XrayConfigBuilder.build(profile,bypassPrivate),descriptor.fd)
+        if(result.isFailure||!bridge.isRunning()){Log.e(TAG,"Xray failed for ${profile.host}: ${result.exceptionOrNull()?.message?:"not running"}");bridge.stop();descriptor.close();return null}
+        if(!waitForSystemVpn()){Log.e(TAG,"System VPN was not established for ${profile.host}");bridge.stop();descriptor.close();return null}
+        return descriptor to bridge
     }
 
     private fun startHealthMonitor(){
         monitorThread?.interrupt();val profile=currentProfile?:return
-        monitorThread=Thread{while(!stopping&&xray?.isRunning()==true){try{Thread.sleep(8000)}catch(_:InterruptedException){break};if(stopping||xray?.isRunning()!=true)break;if(!isReachable(profile)){Log.w(TAG,"Server ${profile.host}:${profile.port} failed health check; switching");val old=profile.raw;runCatching{xray?.stop()};xray=null;tun?.close();tun=null;currentProfile=null;setState(false,null);val candidates=ProfileStore.profiles(this).filter{it.raw!=old}.map{it to probe(it)}.sortedBy{it.second?:Long.MAX_VALUE}.map{it.first};for(candidate in candidates){if(startTunnelForProfile(candidate)){currentProfile=candidate;updateNotification("LBD переключена • ${candidate.name}");startHealthMonitor();return@Thread}};if(!stopping)fail("Основной сервер недоступен, резервных серверов нет");return@Thread}}}.apply{isDaemon=true;name="LABUDA-server-health";start()}
+        monitorThread=Thread{while(!stopping&&xray?.isRunning()==true){try{Thread.sleep(8000)}catch(_:InterruptedException){break};if(stopping||xray?.isRunning()!=true)break;if(!isReachable(profile)){Log.w(TAG,"Server ${profile.host}:${profile.port} failed health check; switching");val old=profile.raw;runCatching{xray?.stop()};xray=null;tun?.close();tun=null;currentProfile=null;setState(false,null);val candidates=ProfileStore.profiles(this).filter{it.raw!=old}.map{it to probe(it)}.sortedBy{it.second?:Long.MAX_VALUE}.map{it.first};for(candidate in candidates){if(stopping)return@Thread;if(startTunnelForProfile(candidate)){currentProfile=candidate;updateNotification("LBD переключена • ${candidate.name}");startHealthMonitor();return@Thread}};if(!stopping)fail("Основной сервер недоступен, резервных серверов нет");return@Thread}}}.apply{isDaemon=true;name="LABUDA-server-health";start()}
     }
     private fun isReachable(p:VlessProfile)=probe(p)!=null
     private fun probe(p:VlessProfile):Long?{val t=System.currentTimeMillis();return runCatching{Socket().use{s->protect(s);s.connect(InetSocketAddress(p.host,p.port),2500)};System.currentTimeMillis()-t}.getOrNull()}
