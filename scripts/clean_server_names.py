@@ -3,6 +3,14 @@ from pathlib import Path
 path = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = path.read_text(encoding="utf-8")
 
+# Repair compact Kotlin expression-body declarations where >= is parsed as an operator.
+for old, new in (
+    ("List<VlessProfile>=", "List<VlessProfile> ="),
+    ("List<SubscriptionInfo>=", "List<SubscriptionInfo> ="),
+    ("Result<SubscriptionPayload>=", "Result<SubscriptionPayload> ="),
+):
+    s = s.replace(old, new)
+
 helper = '''
 private fun normalizeServerName(name: String, subscriptionTitle: String): String {
     var result = name.trim()
