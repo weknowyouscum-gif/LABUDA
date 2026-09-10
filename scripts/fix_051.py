@@ -3,14 +3,16 @@ from pathlib import Path
 path = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = path.read_text(encoding="utf-8")
 
-# The 0.47 transformation introduced a suspend callback helper. Normalize all
-# generated variants so the callback is consistently suspend and every ping
-# calculation inside it is coroutine-safe.
+# Normalize generated callback/suspend variants.
 s = s.replace(".onSuccess { p ->", ".onSuccessSuspend { p ->")
 s = s.replace(".onSuccessSuspend{p->", ".onSuccessSuspend { p ->")
 s = s.replace(".onSuccessSuspend {p->", ".onSuccessSuspend { p ->")
 s = s.replace("withContext(Dispatchers.IO){p.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}}", "runBlocking(Dispatchers.IO) { p.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) } }")
-s = s.replace("withContext(Dispatchers.IO){p.profiles.map{it.copy(latencyMs=ping(it.host,it.port))}}", "runBlocking(Dispatchers.IO) { p.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) } }")
+
+# The source is minified; Kotlin can misread '>=' after generic return types.
+s = s.replace("List<VlessProfile>=", "List<VlessProfile> =")
+s = s.replace("List<SubscriptionInfo>=", "List<SubscriptionInfo> =")
+s = s.replace("suspend(T)->Unit", "suspend (T) -> Unit")
 
 # Ensure the helper has one valid Kotlin declaration.
 start = s.find("private suspend inline fun <T> Result<T>.onSuccessSuspend")
