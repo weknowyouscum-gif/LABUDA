@@ -1,6 +1,6 @@
 from pathlib import Path
 
-# This script applies small source-level compatibility/UI fixes before the Android build.
+# This script applies source-level compatibility/UI fixes before the Android build.
 main = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 text = main.read_text(encoding="utf-8")
 
@@ -69,19 +69,20 @@ text = text.replace(
     '                trafficBytes = prefs.getLong(VpnStats.KEY_RX, 0L) + prefs.getLong(VpnStats.KEY_TX, 0L),\n                rxBytes = prefs.getLong(VpnStats.KEY_RX, 0L),\n                txBytes = prefs.getLong(VpnStats.KEY_TX, 0L),\n                rxSpeed = prefs.getLong(VpnStats.KEY_RX_SPEED, 0L),\n                txSpeed = prefs.getLong(VpnStats.KEY_TX_SPEED, 0L),\n                comment = prefs.getString(VpnStats.KEY_COMMENT, "").orEmpty().let { value ->\n                    if (value.startsWith("Подключено") || value.startsWith("Отключено") || value.startsWith("Ошибка VPN") || value.startsWith("Подключение")) "" else value\n                }',
     1,
 )
-
 main.write_text(text, encoding="utf-8")
 
-# Extend routing to have the explicit third mode: all traffic through VPN.
-routing = Path("app/src/main/java/com/labuda/app/RoutingSettingsActivity.kt")
-r = routing.read_text(encoding="utf-8")
-r = r.replace('private const val MODE_BYPASS = "bypass"\nprivate const val MODE_TUNNEL = "tunnel"', 'private const val MODE_ALL = "all"\nprivate const val MODE_BYPASS = "bypass"\nprivate const val MODE_TUNNEL = "tunnel"', 1)
-r = r.replace('        .let { if (it == MODE_TUNNEL) MODE_TUNNEL else MODE_BYPASS }', '        .let { when (it) { MODE_ALL -> MODE_ALL; MODE_TUNNEL -> MODE_TUNNEL; else -> MODE_BYPASS } }', 1)
-r = r.replace(
-'''                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {\n                            RadioButton(selected = mode == MODE_BYPASS, onClick = { mode = MODE_BYPASS })''',
-'''                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {\n                            RadioButton(selected = mode == MODE_ALL, onClick = { mode = MODE_ALL })\n                            Column(Modifier.weight(1f)) {\n                                Text("1. Весь трафик через VPN", fontSize = 16.sp)\n                                Text("Все приложения работают через туннель", color = MaterialTheme.colorScheme.onSurfaceVariant)\n                            }\n                        }\n                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {\n                            RadioButton(selected = mode == MODE_TUNNEL, onClick = { mode = MODE_TUNNEL })''', 1)
-r = r.replace('Text("1. Обход", fontSize = 16.sp)', 'Text("3. Обход", fontSize = 16.sp)', 1)
-r = r.replace('Text("2. Туннель", fontSize = 16.sp)', 'Text("2. Только выбранные приложения", fontSize = 16.sp)', 1)
-r = r.replace('if (mode == MODE_BYPASS) "Отмеченные приложения будут обходить VPN" else "Отмеченные приложения будут работать через VPN"', 'when (mode) { MODE_ALL -> "Выбор приложений не требуется"; MODE_BYPASS -> "Отмеченные приложения будут обходить VPN"; else -> "Отмеченные приложения будут работать через VPN" }', 1)
-routing.write_text(r, encoding="utf-8")
-print("Applied LABUDA 0.41 compact one-screen UI, routing button, three routing modes and traffic layout")
+# Make the VPN service understand the explicit three-state routing model.
+service = Path("app/src/main/java/com/labuda/app/LabudaVpnService.kt")
+s = service.read_text(encoding="utf-8")
+s = s.replace('        private const val MODE_BYPASS = "bypass"\n        private const val MODE_TUNNEL = "tunnel"', '        private const val MODE_ALL = "all"\n        private const val MODE_BYPASS = "bypass"\n        private const val MODE_TUNNEL = "tunnel"', 1)
+s = s.replace(
+'''        val routingMode = prefs.getString(KEY_ROUTING_MODE, MODE_BYPASS).orEmpty()\n            .let { if (it == MODE_TUNNEL) MODE_TUNNEL else MODE_BYPASS }''',
+'''        val routingMode = prefs.getString(KEY_ROUTING_MODE, MODE_ALL).orEmpty()\n            .let { when (it) { MODE_ALL -> MODE_ALL; MODE_TUNNEL -> MODE_TUNNEL; else -> MODE_BYPASS } }''', 1)
+old_route = '''        if (routingMode == MODE_TUNNEL) {\n            selectedApps.forEach { packageName ->\n                runCatching { builder.addAllowedApplication(packageName) }\n                    .onFailure { Log.w(TAG, "Could not allow app $packageName: ${it.message}") }\n            }\n            Log.i(TAG, "Routing mode=TUNNEL; selectedApps=${selectedApps.size}")\n        } else {\n            runCatching { builder.addDisallowedApplication(packageName) }\n            selectedApps.forEach { packageName ->\n                runCatching { builder.addDisallowedApplication(packageName) }\n                    .onFailure { Log.w(TAG, "Could not bypass app $packageName: ${it.message}") }\n            }\n            Log.i(TAG, "Routing mode=BYPASS; selectedApps=${selectedApps.size}")\n        }'''
+new_route = '''        if (routingMode == MODE_TUNNEL) {\n            selectedApps.forEach { packageName ->\n                runCatching { builder.addAllowedApplication(packageName) }\n                    .onFailure { Log.w(TAG, "Could not allow app $packageName: ${it.message}") }\n            }\n            Log.i(TAG, "Routing mode=TUNNEL; selectedApps=${selectedApps.size}")\n        } else {\n            // LABUDA itself must stay outside the tunnel to avoid a VPN loop.\n            runCatching { builder.addDisallowedApplication(packageName) }\n            if (routingMode == MODE_BYPASS) {\n                selectedApps.forEach { packageName ->\n                    runCatching { builder.addDisallowedApplication(packageName) }\n                        .onFailure { Log.w(TAG, "Could not bypass app $packageName: ${it.message}") }\n                }\n                Log.i(TAG, "Routing mode=BYPASS; selectedApps=${selectedApps.size}")\n            } else {\n                Log.i(TAG, "Routing mode=ALL; all apps except LABUDA use VPN")\n            }\n        }'''
+if old_route in s:
+    s = s.replace(old_route, new_route, 1)
+else:
+    raise SystemExit("Expected routing service block not found")
+service.write_text(s, encoding="utf-8")
+print("Applied LABUDA 0.41 compact one-screen UI, routing icon, three routing modes and traffic layout")
