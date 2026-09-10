@@ -1,6 +1,7 @@
 package com.labuda.app
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,8 +20,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,143 +42,72 @@ import androidx.compose.ui.unit.sp
 private const val PREFS = "labuda"
 private const val KEY_ROUTING_MODE = "routing_mode"
 private const val KEY_ROUTING_APPS = "routing_apps"
-
 private const val MODE_ALL = "all"
 private const val MODE_BYPASS = "bypass"
 private const val MODE_TUNNEL = "tunnel"
 
-data class RoutingApp(val packageName: String, val label: String)
+data class RoutingApp(val packageName: String, val label: String, val system: Boolean)
 
 object RoutingStore {
     fun mode(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_ROUTING_MODE, MODE_ALL).orEmpty()
-        .let { when (it) { MODE_ALL -> MODE_ALL; MODE_TUNNEL -> MODE_TUNNEL; else -> MODE_BYPASS } }
-
-    fun selectedApps(context: Context): Set<String> = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getStringSet(KEY_ROUTING_APPS, emptySet()).orEmpty()
-
-    fun save(context: Context, mode: String, apps: Set<String>) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_ROUTING_MODE, mode)
-            .putStringSet(KEY_ROUTING_APPS, apps)
-            .apply()
-    }
+        .getString(KEY_ROUTING_MODE, MODE_ALL).orEmpty().let { when (it) { MODE_ALL -> MODE_ALL; MODE_TUNNEL -> MODE_TUNNEL; else -> MODE_BYPASS } }
+    fun selectedApps(context: Context): Set<String> = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet(KEY_ROUTING_APPS, emptySet()).orEmpty()
+    fun save(context: Context, mode: String, apps: Set<String>) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ROUTING_MODE, mode).putStringSet(KEY_ROUTING_APPS, apps).apply()
 }
 
 class RoutingSettingsActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent { RoutingScreen(this) }
-    }
-
-    override fun onBackPressed() {
-        @Suppress("DEPRECATION")
-        super.onBackPressed()
-    }
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { RoutingScreen(this) } }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun RoutingScreen(context: Context) {
     var mode by remember { mutableStateOf(RoutingStore.mode(context)) }
-    var selectedApps by remember { mutableStateOf(RoutingStore.selectedApps(context)) }
+    var selected by remember { mutableStateOf(RoutingStore.selectedApps(context)) }
+    var filter by remember { mutableStateOf("all") }
     var search by remember { mutableStateOf("") }
     val apps = remember { loadApps(context) }
-    val filteredApps = remember(apps, search) {
+    val visible = remember(apps, filter, search) {
         val q = search.trim().lowercase()
-        if (q.isBlank()) apps else apps.filter {
-            it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q)
-        }
+        apps.filter { filter == "all" || (filter == "system" && it.system) || (filter == "installed" && !it.system) }
+            .filter { q.isBlank() || it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q) }
     }
-
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().padding(14.dp)) {
+            Column(Modifier.fillMaxSize().padding(12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { (context as? ComponentActivity)?.finish() }) {
-                        Icon(Icons.Filled.ArrowBack, "Назад")
-                    }
-                    Text("Маршрутизация", fontSize = 23.sp)
+                    IconButton(onClick = { finish() }) { Icon(Icons.Filled.ArrowBack, "Назад") }
+                    Text("Настройки • Маршрутизация", fontSize = 21.sp)
                 }
-                Spacer(Modifier.height(6.dp))
-                Text("Режим", fontSize = 17.sp)
-                Spacer(Modifier.height(4.dp))
-
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors()) {
-                    Column(Modifier.padding(6.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = mode == MODE_ALL, onClick = { mode = MODE_ALL })
-                            Column(Modifier.weight(1f)) {
-                                Text("1. Весь трафик через LBD", fontSize = 15.sp)
-                                Text("Все приложения работают через туннель", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                            }
-                        }
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = mode == MODE_TUNNEL, onClick = { mode = MODE_TUNNEL })
-                            Column(Modifier.weight(1f)) {
-                                Text("2. Только выбранные приложения", fontSize = 15.sp)
-                                Text("Отмеченные приложения работают через LBD", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                            }
-                        }
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = mode == MODE_BYPASS, onClick = { mode = MODE_BYPASS })
-                            Column(Modifier.weight(1f)) {
-                                Text("3. Выбранные приложения обходят LBD", fontSize = 15.sp)
-                                Text("Отмеченные приложения работают напрямую", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("Режим маршрутизации", fontSize = 16.sp)
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(4.dp)) {
+                        listOf(MODE_ALL to "Все приложения", MODE_TUNNEL to "Только выбранные", MODE_BYPASS to "Выбранные обходят LBD").forEach { (value, title) ->
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = mode == value, onClick = { mode = value })
+                                Text(title)
                             }
                         }
                     }
                 }
-
                 Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Приложения (${apps.size})", fontSize = 17.sp, modifier = Modifier.weight(1f))
+                Text("Фильтр приложений", fontSize = 16.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = filter == "all", onClick = { filter = "all" }, label = { Text("Все") })
+                    FilterChip(selected = filter == "system", onClick = { filter = "system" }, label = { Text("Системные") })
+                    FilterChip(selected = filter == "installed", onClick = { filter = "installed" }, label = { Text("Установленные") })
                 }
-                OutlinedTextField(
-                    value = search,
-                    onValueChange = { search = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Поиск") },
-                    placeholder = { Text("Поиск приложения") }
-                )
-                Text(
-                    when (mode) {
-                        MODE_ALL -> "При этом режиме выбор приложений не используется"
-                        MODE_BYPASS -> "Отмеченные приложения будут обходить LBD"
-                        else -> "Отмеченные приложения будут работать через LBD"
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
+                OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, "Поиск") }, placeholder = { Text("Поиск приложения") })
+                Text("Приложений: ${visible.size}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
-
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    items(filteredApps, key = { it.packageName }) { app ->
+                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    items(visible, key = { it.packageName }) { app ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = selectedApps.contains(app.packageName),
-                                onCheckedChange = { checked ->
-                                    selectedApps = if (checked) selectedApps + app.packageName else selectedApps - app.packageName
-                                }
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(app.label, fontSize = 14.sp)
-                                Text(app.packageName, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            Checkbox(checked = selected.contains(app.packageName), onCheckedChange = { checked -> selected = if (checked) selected + app.packageName else selected - app.packageName })
+                            Column(Modifier.weight(1f)) { Text(app.label, fontSize = 14.sp); Text(app.packageName, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
                 }
-
-                Button(
-                    onClick = {
-                        RoutingStore.save(context, mode, selectedApps)
-                        (context as? ComponentActivity)?.finish()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(44.dp)
-                ) { Text("Сохранить") }
+                Button(onClick = { RoutingStore.save(context, mode, selected); finish() }, modifier = Modifier.fillMaxWidth().height(44.dp)) { Text("Сохранить") }
             }
         }
     }
@@ -184,8 +115,7 @@ private fun RoutingScreen(context: Context) {
 
 private fun loadApps(context: Context): List<RoutingApp> {
     val pm = context.packageManager
-    return pm.getInstalledApplications(0)
-        .filter { it.packageName != context.packageName }
-        .map { RoutingApp(it.packageName, it.loadLabel(pm).toString().ifBlank { it.packageName }) }
-        .sortedBy { it.label.lowercase() }
+    return pm.getInstalledApplications(0).filter { it.packageName != context.packageName }.map {
+        RoutingApp(it.packageName, it.loadLabel(pm).toString().ifBlank { it.packageName }, (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0 || (it.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0)
+    }.sortedBy { it.label.lowercase() }
 }
