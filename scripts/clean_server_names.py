@@ -3,7 +3,7 @@ from pathlib import Path
 path = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = path.read_text(encoding="utf-8")
 
-helper = r'''
+helper = '''
 private fun normalizeServerName(name: String, subscriptionTitle: String): String {
     var result = name.trim()
     val titles = listOf(subscriptionTitle, "Подписка")
