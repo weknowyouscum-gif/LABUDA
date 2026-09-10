@@ -29,12 +29,14 @@ jobs:
           curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
       - name: Fix Kotlin source before build
-        run: python3 scripts/fix_build.py
+        run: |
+          python3 scripts/fix_build.py
+          python3 scripts/fix_042.py
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LABUDA-debug
+          name: LABUDA-0.42-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
