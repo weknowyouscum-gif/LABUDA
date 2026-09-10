@@ -12,8 +12,8 @@ android {
         applicationId = "com.labuda.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 48
-        versionName = "0.48"
+        versionCode = 49
+        versionName = "0.49"
     }
 
     compileOptions {
