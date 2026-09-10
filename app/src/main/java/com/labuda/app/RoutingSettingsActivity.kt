@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -23,6 +24,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -77,7 +79,14 @@ class RoutingSettingsActivity : ComponentActivity() {
 private fun RoutingScreen(context: Context) {
     var mode by remember { mutableStateOf(RoutingStore.mode(context)) }
     var selectedApps by remember { mutableStateOf(RoutingStore.selectedApps(context)) }
+    var search by remember { mutableStateOf("") }
     val apps = remember { loadApps(context) }
+    val filteredApps = remember(apps, search) {
+        val q = search.trim().lowercase()
+        if (q.isBlank()) apps else apps.filter {
+            it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q)
+        }
+    }
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
@@ -97,7 +106,7 @@ private fun RoutingScreen(context: Context) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = mode == MODE_ALL, onClick = { mode = MODE_ALL })
                             Column(Modifier.weight(1f)) {
-                                Text("1. Весь трафик через VPN", fontSize = 15.sp)
+                                Text("1. Весь трафик через LBD", fontSize = 15.sp)
                                 Text("Все приложения работают через туннель", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             }
                         }
@@ -105,13 +114,13 @@ private fun RoutingScreen(context: Context) {
                             RadioButton(selected = mode == MODE_TUNNEL, onClick = { mode = MODE_TUNNEL })
                             Column(Modifier.weight(1f)) {
                                 Text("2. Только выбранные приложения", fontSize = 15.sp)
-                                Text("Отмеченные приложения работают через VPN", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                                Text("Отмеченные приложения работают через LBD", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             }
                         }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = mode == MODE_BYPASS, onClick = { mode = MODE_BYPASS })
                             Column(Modifier.weight(1f)) {
-                                Text("3. Выбранные приложения обходят VPN", fontSize = 15.sp)
+                                Text("3. Выбранные приложения обходят LBD", fontSize = 15.sp)
                                 Text("Отмеченные приложения работают напрямую", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             }
                         }
@@ -119,12 +128,22 @@ private fun RoutingScreen(context: Context) {
                 }
 
                 Spacer(Modifier.height(8.dp))
-                Text("Приложения", fontSize = 17.sp)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Приложения (${apps.size})", fontSize = 17.sp, modifier = Modifier.weight(1f))
+                }
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Поиск") },
+                    placeholder = { Text("Поиск приложения") }
+                )
                 Text(
                     when (mode) {
                         MODE_ALL -> "При этом режиме выбор приложений не используется"
-                        MODE_BYPASS -> "Отмеченные приложения будут обходить VPN"
-                        else -> "Отмеченные приложения будут работать через VPN"
+                        MODE_BYPASS -> "Отмеченные приложения будут обходить LBD"
+                        else -> "Отмеченные приложения будут работать через LBD"
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
@@ -135,7 +154,7 @@ private fun RoutingScreen(context: Context) {
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    items(apps, key = { it.packageName }) { app ->
+                    items(filteredApps, key = { it.packageName }) { app ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = selectedApps.contains(app.packageName),
@@ -143,7 +162,10 @@ private fun RoutingScreen(context: Context) {
                                     selectedApps = if (checked) selectedApps + app.packageName else selectedApps - app.packageName
                                 }
                             )
-                            Text(app.label, Modifier.weight(1f), fontSize = 14.sp)
+                            Column(Modifier.weight(1f)) {
+                                Text(app.label, fontSize = 14.sp)
+                                Text(app.packageName, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
@@ -163,10 +185,7 @@ private fun RoutingScreen(context: Context) {
 private fun loadApps(context: Context): List<RoutingApp> {
     val pm = context.packageManager
     return pm.getInstalledApplications(0)
-        .asSequence()
         .filter { it.packageName != context.packageName }
-        .filter { pm.getLaunchIntentForPackage(it.packageName) != null }
         .map { RoutingApp(it.packageName, it.loadLabel(pm).toString().ifBlank { it.packageName }) }
         .sortedBy { it.label.lowercase() }
-        .toList()
 }
