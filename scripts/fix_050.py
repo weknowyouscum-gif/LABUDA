@@ -29,6 +29,7 @@ block = '''                Text("Автовыбор лучшего сервер�
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Автоматически выбирать сервер с минимальным пингом", modifier = Modifier.weight(1f), fontSize = 14.sp)
+                        Text(if (autoBest) "Да" else "Нет", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         androidx.compose.material3.Switch(checked = autoBest, onCheckedChange = { autoBest = it })
                     }
                 }
