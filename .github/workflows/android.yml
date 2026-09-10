@@ -32,6 +32,8 @@ jobs:
         run: python3 scripts/clean_server_names.py
       - name: Apply 0.46 ping display fix
         run: python3 scripts/fix_046.py
+      - name: Apply 0.47 VPN title fix
+        run: python3 scripts/fix_047.py
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
       - name: Rename APK to LABUDA version format
