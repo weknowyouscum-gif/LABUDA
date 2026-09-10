@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 path = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = path.read_text(encoding="utf-8")
