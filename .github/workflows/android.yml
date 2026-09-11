@@ -28,6 +28,25 @@ jobs:
           mkdir -p app/libs
           curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
+      - name: Fix 0.52 Kotlin syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/labuda/app/MainActivity.kt')
+          s = p.read_text(encoding='utf-8')
+          old = 'onFavorite: (VlessProfile)->Unit){Column'
+          if old not in s:
+              raise SystemExit('MainScreen marker not found')
+          # The generated 0.52 source has two extra closing braces at the end of LabudaApp.
+          marker = '@Composable private fun LabudaApp'
+          start = s.index(marker)
+          end = s.index('\nprivate fun normalizeSubscriptionTitle', start)
+          block = s[start:end]
+          if not block.endswith('}}}}'):
+              raise SystemExit('Unexpected LabudaApp ending; refusing unsafe edit')
+          s = s[:start] + block[:-2] + s[end:]
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
       - name: Rename APK to LABUDA version format
