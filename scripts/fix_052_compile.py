@@ -103,4 +103,42 @@ s='\n'.join(lines)+'\n'
 if 'private fun formatExpiry(' not in s:
     s += '\nprivate fun formatExpiry(ms:Long):String = java.text.SimpleDateFormat("dd.MM.yyyy",java.util.Locale.getDefault()).format(java.util.Date(ms))\n'
 p.write_text(s,encoding='utf-8')
-print('fixed MainActivity.kt')
+
+# LABUDA 1.0.0.0 UI/security changes
+p=Path('app/src/main/java/com/labuda/app/MainActivity.kt')
+s=p.read_text(encoding='utf-8')
+# Remove the airplane from the top bar.
+s=s.replace('IconButton(onClick={activityLaunchTelegram()},modifier=Modifier.size(36.dp)){Text("✈",fontSize=20.sp)};','')
+# MainScreen owns the settings state so the gear opens a settings hub instead of routing directly.
+s=s.replace('onDark:(Boolean)->Unit,onSettings:()->Unit,onSelect:', 'onDark:(Boolean)->Unit,onSelect:', 1)
+s=s.replace('{dark=it;prefs.edit().putBoolean(KEY_DARK_THEME,it).apply()},{activity.startActivity(Intent(activity,RoutingSettingsActivity::class.java))},{p->', '{dark=it;prefs.edit().putBoolean(KEY_DARK_THEME,it).apply()},{p->', 1)
+settings='''@Composable private fun SettingsScreen(onBack:()->Unit,onRouting:()->Unit,onHelp:()->Unit){
+    Column(Modifier.fillMaxSize().padding(20.dp)){
+        Text("Настройки",fontSize=26.sp,fontWeight=FontWeight.Black)
+        Spacer(Modifier.height(20.dp))
+        Button(onClick=onRouting,modifier=Modifier.fillMaxWidth()){Text("Маршрутизация")}
+        Spacer(Modifier.height(12.dp))
+        Button(onClick=onHelp,modifier=Modifier.fillMaxWidth()){Text("Помощь")}
+        Spacer(Modifier.height(20.dp))
+        Text("Telegram",fontSize=16.sp,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.primary,modifier=Modifier.clickable(onClick=onHelp))
+        Spacer(Modifier.height(24.dp))
+        Button(onClick=onBack,modifier=Modifier.fillMaxWidth()){Text("Назад")}
+    }
+}
+'''
+if '@Composable private fun SettingsScreen(' not in s:
+    s=s.replace('@Composable private fun MainScreen(', settings+'@Composable private fun MainScreen(', 1)
+# Add local settings screen and replace the old top-level Column body with an in-place hub.
+s=s.replace('{Column(Modifier.fillMaxSize().padding(horizontal=12.dp).padding(top=32.dp)){Row(', '{var showSettings by remember{mutableStateOf(false)};if(showSettings) SettingsScreen({showSettings=false},{activity.startActivity(Intent(activity,RoutingSettingsActivity::class.java))},{activity.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(TELEGRAM_SUPPORT_URL)))}) else Column(Modifier.fillMaxSize().padding(horizontal=12.dp).padding(top=32.dp)){Row(', 1)
+# The gear now toggles the local settings hub.
+s=s.replace('IconButton(onSettings){Icon(Icons.Filled.Settings,"Настройки")};','IconButton(onClick={showSettings=true}){Icon(Icons.Filled.Settings,"Настройки")};', 1)
+# Remove the obsolete placeholder helper.
+s=s.replace('\nprivate fun activityLaunchTelegram(){/* placeholder */}\n','\n')
+p.write_text(s,encoding='utf-8')
+
+# Disable the 3FA login screen: opening the security activity now goes straight to LABUDA.
+sec=Path('app/src/main/java/com/labuda/app/SecurityActivity.kt')
+ss=sec.read_text(encoding='utf-8')
+ss=ss.replace('override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        showSecurity()\n    }','override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        openApp()\n    }',1)
+sec.write_text(ss,encoding='utf-8')
+print('applied LABUDA 1.0.0.0 changes')
