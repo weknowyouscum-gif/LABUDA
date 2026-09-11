@@ -6,29 +6,29 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 
-val Tele2TextSans = FontFamily(
-    Font(R.font.tele2_text_sans, FontWeight.Normal),
+val OswaldText = FontFamily(
+    Font(R.font.oswald, FontWeight.Normal),
 )
 
-private fun tele2(style: TextStyle): TextStyle = style.copy(fontFamily = Tele2TextSans)
+private fun oswald(style: TextStyle): TextStyle = style.copy(fontFamily = OswaldText)
 
-val Tele2Typography: Typography by lazy {
+val OswaldTypography: Typography by lazy {
     val base = Typography()
     Typography(
-        displayLarge = tele2(base.displayLarge),
-        displayMedium = tele2(base.displayMedium),
-        displaySmall = tele2(base.displaySmall),
-        headlineLarge = tele2(base.headlineLarge),
-        headlineMedium = tele2(base.headlineMedium),
-        headlineSmall = tele2(base.headlineSmall),
-        titleLarge = tele2(base.titleLarge),
-        titleMedium = tele2(base.titleMedium),
-        titleSmall = tele2(base.titleSmall),
-        bodyLarge = tele2(base.bodyLarge),
-        bodyMedium = tele2(base.bodyMedium),
-        bodySmall = tele2(base.bodySmall),
-        labelLarge = tele2(base.labelLarge),
-        labelMedium = tele2(base.labelMedium),
-        labelSmall = tele2(base.labelSmall),
+        displayLarge = oswald(base.displayLarge),
+        displayMedium = oswald(base.displayMedium),
+        displaySmall = oswald(base.displaySmall),
+        headlineLarge = oswald(base.headlineLarge),
+        headlineMedium = oswald(base.headlineMedium),
+        headlineSmall = oswald(base.headlineSmall),
+        titleLarge = oswald(base.titleLarge),
+        titleMedium = oswald(base.titleMedium),
+        titleSmall = oswald(base.titleSmall),
+        bodyLarge = oswald(base.bodyLarge),
+        bodyMedium = oswald(base.bodyMedium),
+        bodySmall = oswald(base.bodySmall),
+        labelLarge = oswald(base.labelLarge),
+        labelMedium = oswald(base.labelMedium),
+        labelSmall = oswald(base.labelSmall),
     )
 }
