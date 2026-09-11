@@ -1,21 +1,22 @@
 from pathlib import Path
 
-# Compatibility step for the 1.0.0.0 build. Keep it deliberately small and safe:
-# patch only the navigation that must be applied at build time to the existing UI.
+# LABUDA 1.0.0.0 compatibility step.
+# IMPORTANT: never delete an entire source line — MainActivity.kt intentionally
+# contains several compact Kotlin declarations on single lines.
 p = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = p.read_text()
-old = 'activity.startActivity(Intent(activity,RoutingSettingsActivity::class.java))'
-new = 'activity.startActivity(Intent(activity,SettingsActivity::class.java))'
-if old in s:
-    s = s.replace(old, new, 1)
 
-# Remove the old airplane/flight visual from the top bar without touching VPN logic.
-lines = []
-for line in s.splitlines():
-    low = line.lower()
-    if "airplane" in low or "flight" in low or "✈" in line:
-        continue
-    lines.append(line)
-s = "\n".join(lines) + "\n"
+# Open the new settings hub instead of routing directly.
+s = s.replace(
+    'activity.startActivity(Intent(activity,RoutingSettingsActivity::class.java))',
+    'activity.startActivity(Intent(activity,SettingsActivity::class.java))',
+    1,
+)
+
+# Remove only the legacy Telegram/airplane button from the top bar.
+# Do not remove the whole line because the UI is minified onto a single line.
+airplane = 'IconButton(onClick={activityLaunchTelegram()},modifier=Modifier.size(36.dp)){Text("✈",fontSize=20.sp)};'
+s = s.replace(airplane, '', 1)
+
 p.write_text(s)
 print("LABUDA 1.0.0.0: applied safe settings navigation and airplane-icon cleanup")
