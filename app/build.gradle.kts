@@ -12,8 +12,8 @@ android {
         applicationId = "com.labuda.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 52
-        versionName = "0.52"
+        versionCode = 1000000
+        versionName = "1.0.0.0"
     }
 
     compileOptions {
@@ -27,9 +27,7 @@ android {
     }
 
     buildTypes {
-        debug {
-            isMinifyEnabled = false
-        }
+        debug { isMinifyEnabled = false }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
