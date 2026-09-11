@@ -48,6 +48,24 @@ jobs:
               raise SystemExit('MaterialTheme target not found')
           p.write_text(s.replace(old, new, 1))
           PY
+      - name: Apply subscription and statistics UI fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/labuda/app/MainActivity.kt')
+          s = p.read_text()
+          replacements = [
+              ('Text(s.title,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))', 'Text("Подписка",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))'),
+              ('storedComment.ifBlank{selectedComment}', 'selectedComment'),
+              ('o.optLong("total",-1).takeIf{it>=0}', 'o.optLong("total",-1).takeIf{it>0}'),
+              ('m["total"],m["expire"]', 'm["total"]?.takeIf{it>0},m["expire"]'),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f'Target not found: {old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
       - name: Set LABUDA version from Actions run number
         shell: bash
         run: |
