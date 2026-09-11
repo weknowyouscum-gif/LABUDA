@@ -30,6 +30,9 @@ jobs:
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
       - name: Fix 0.52 Kotlin source
         run: python3 scripts/fix_052_compile.py
+      - name: Reduce server name font size
+        run: |
+          sed -i 's/Text(p.name,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))/Text(p.name,fontWeight=FontWeight.Bold,fontSize=14.sp,modifier=Modifier.weight(1f))/' app/src/main/java/com/labuda/app/MainActivity.kt
       - name: Set LABUDA version from Actions run number
         shell: bash
         run: |
