@@ -113,8 +113,14 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
     val apps = remember { loadApps(context) }
     val visible = remember(apps, filter, search) {
         val q = search.trim().lowercase()
-        apps.filter { filter == "all" || (filter == "system" && it.system) || (filter == "installed" && !it.system) }
-            .filter { q.isBlank() || it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q) }
+        apps.filter {
+            when (filter) {
+                "system" -> it.system
+                "installed" -> !it.system
+                "popular" -> !it.system && PopularApps.requiresRouting(it.packageName)
+                else -> true
+            }
+        }.filter { q.isBlank() || it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q) }
     }
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
@@ -138,11 +144,16 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
                 Text("Фильтр приложений", fontSize = 16.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(selected = filter == "all", onClick = { filter = "all" }, label = { Text("Все") })
-                    FilterChip(selected = filter == "system", onClick = { filter = "system" }, label = { Text("Системные") })
+                    FilterChip(selected = filter == "popular", onClick = { filter = "popular" }, label = { Text("Популярные") })
                     FilterChip(selected = filter == "installed", onClick = { filter = "installed" }, label = { Text("Установленные") })
+                    FilterChip(selected = filter == "system", onClick = { filter = "system" }, label = { Text("Системные") })
                 }
                 OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, "Поиск") }, placeholder = { Text("Поиск приложения") })
-                Text("Приложений: ${visible.size}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (filter == "popular") "Требуют маршрутизацию: ${visible.size}" else "Приложений: ${visible.size}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(Modifier.height(4.dp))
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     items(visible, key = { it.packageName }) { app ->
