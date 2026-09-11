@@ -1,13 +1,9 @@
 from pathlib import Path
-import re
 
 # LABUDA 1.0.0.0 build-time compatibility and stabilization patch.
 p = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = p.read_text()
 
-# Replace the fragile minified LabudaApp block with a small, explicit Compose state
-# controller. This removes nested suspend/lambda parsing hazards and avoids blocking
-# the UI thread during subscription refresh and ping checks.
 start = s.find('@Composable private fun LabudaApp')
 end = s.find('\n\nprivate fun normalizeSubscriptionTitle', start)
 if start < 0 or end < 0:
@@ -77,12 +73,9 @@ private fun LabudaApp(activity: MainActivity) {
         busy = true
         message = ""
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                importSubscription(activity, cleanUrl)
-            }
+            val result = withContext(Dispatchers.IO) { importSubscription(activity, cleanUrl) }
             result.onSuccess { payload ->
-                val existing = subs.any { it.url.trim() == cleanUrl }
-                if (existing) {
+                if (subs.any { it.url.trim() == cleanUrl }) {
                     message = "Подписка уже добавлена"
                 } else {
                     val title = normalizeSubscriptionTitle(payload.title)
@@ -103,9 +96,7 @@ private fun LabudaApp(activity: MainActivity) {
                     showImport = false
                     message = "Добавлено серверов: ${finalSub.profiles.size}"
                 }
-            }.onFailure { error ->
-                message = error.message ?: "Не удалось импортировать подписку"
-            }
+            }.onFailure { error -> message = error.message ?: "Не удалось импортировать подписку" }
             busy = false
         }
     }
@@ -119,11 +110,8 @@ private fun LabudaApp(activity: MainActivity) {
                 subs.map { old ->
                     val payload = importSubscription(activity, old.url).getOrNull() ?: return@map old
                     val title = normalizeSubscriptionTitle(payload.title).ifBlank { old.title }
-                    val profiles = payload.profiles.map { profile ->
-                        profile.copy(name = cleanServerName(profile.name, title))
-                    }
-                    val pinged = profiles.map { profile ->
-                        profile.copy(latencyMs = ping(profile.host, profile.port))
+                    val pinged = payload.profiles.map { profile ->
+                        profile.copy(name = cleanServerName(profile.name, title), latencyMs = ping(profile.host, profile.port))
                     }
                     old.copy(
                         title = title,
@@ -136,9 +124,8 @@ private fun LabudaApp(activity: MainActivity) {
                 }
             }
             subs = refreshed
-            selected = selected?.let { old ->
-                refreshed.flatMap { it.profiles }.firstOrNull { it.raw == old.raw }
-            } ?: refreshed.flatMap { it.profiles }.firstOrNull()
+            selected = selected?.let { old -> refreshed.flatMap { it.profiles }.firstOrNull { it.raw == old.raw } }
+                ?: refreshed.flatMap { it.profiles }.firstOrNull()
             selected?.let { ProfileStore.select(activity, it) }
             saveSubscriptions()
             busy = false
@@ -148,7 +135,7 @@ private fun LabudaApp(activity: MainActivity) {
 
     MaterialTheme(
         colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
-        typography = Tele2Typography
+        typography = OswaldTypography
     ) {
         Surface(Modifier.fillMaxSize()) {
             if (showImport) {
@@ -167,25 +154,14 @@ private fun LabudaApp(activity: MainActivity) {
             } else {
                 MainScreen(
                     subs, selected, connected, busy, message, stats, dark,
-                    { value ->
-                        dark = value
-                        prefs.edit().putBoolean(KEY_DARK_THEME, value).apply()
-                    },
+                    { value -> dark = value; prefs.edit().putBoolean(KEY_DARK_THEME, value).apply() },
                     { activity.startActivity(Intent(activity, SettingsActivity::class.java)) },
-                    { profile ->
-                        selected = profile
-                        ProfileStore.select(activity, profile)
-                        if (connected) activity.switchVpn()
-                    },
+                    { profile -> selected = profile; ProfileStore.select(activity, profile); if (connected) activity.switchVpn() },
                     { if (connected) activity.stopVpn() else activity.startVpn() },
                     { refreshSubscriptions() },
                     { importUrl = ""; showImport = true },
                     { profile ->
-                        subs = subs.map { sub ->
-                            sub.copy(profiles = sub.profiles.map {
-                                if (it.raw == profile.raw) it.copy(favorite = !it.favorite) else it
-                            })
-                        }
+                        subs = subs.map { sub -> sub.copy(profiles = sub.profiles.map { if (it.raw == profile.raw) it.copy(favorite = !it.favorite) else it }) }
                         saveSubscriptions()
                     }
                 )
@@ -197,4 +173,4 @@ private fun LabudaApp(activity: MainActivity) {
 
 s = s[:start] + new_app + s[end:]
 p.write_text(s)
-print("LABUDA 1.0.0.0: stabilized Compose state flow and removed blocking/nested suspend UI code")
+print("LABUDA 1.0.0.0: stabilized Compose state flow, removed blocking UI refresh, and applied Oswald directly")
