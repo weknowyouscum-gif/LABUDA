@@ -30,12 +30,20 @@ jobs:
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
       - name: Fix 0.52 Kotlin source
         run: python3 scripts/fix_052_compile.py
+      - name: Set LABUDA version from Actions run number
+        shell: bash
+        run: |
+          SUFFIX=$((GITHUB_RUN_NUMBER % 100))
+          VERSION="1.$(printf '%02d' "$SUFFIX")"
+          sed -i -E "s/versionName[[:space:]]*=[[:space:]]*\"[^\"]+\"/versionName = \"$VERSION\"/" app/build.gradle.kts
+          echo "LABUDA_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Building LABUDA $VERSION from Actions run #$GITHUB_RUN_NUMBER"
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
       - name: Rename APK to LABUDA version format
         shell: bash
         run: |
-          VERSION=$(grep -E 'versionName\s*=\s*"' app/build.gradle.kts | sed -E 's/.*versionName\s*=\s*"([^"]+)".*/\1/')
+          VERSION="$LABUDA_VERSION"
           test -n "$VERSION"
           cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/LABUDA${VERSION}.APK"
           echo "LABUDA_APK=LABUDA${VERSION}.APK" >> "$GITHUB_ENV"
