@@ -28,16 +28,8 @@ jobs:
           mkdir -p app/libs
           curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
-      - name: Apply 0.46 ping display fix
-        run: python3 scripts/fix_046.py
-      - name: Apply 0.47 VPN title fix
-        run: python3 scripts/fix_047.py
-      - name: Apply 0.50 auto best server
-        run: python3 scripts/fix_050.py
-      - name: Normalize server names
-        run: python3 scripts/clean_server_names.py
-      - name: Apply 0.51 Kotlin build fix
-        run: python3 scripts/fix_051.py
+      - name: Apply minimal 0.51 Kotlin cleanup
+        run: python3 scripts/fix_051_minimal.py
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
       - name: Rename APK to LABUDA version format
