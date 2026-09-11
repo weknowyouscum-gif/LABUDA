@@ -26,33 +26,15 @@ jobs:
       - name: Fetch Xray Android engine
         run: |
           mkdir -p app/libs
-          curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
-            https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
+          curl -L --fail --retry 3 -o app/libs/libv2ray.aar https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
       - name: Install Oswald font
         run: |
           mkdir -p app/src/main/res/font
-          curl -L --fail --retry 3 -o app/src/main/res/font/oswald.ttf \
-            https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf
+          curl -L --fail --retry 3 -o app/src/main/res/font/oswald.ttf https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf
       - name: Fix legacy Kotlin compile compatibility
         run: python3 scripts/fix_052_compile.py
       - name: Reduce server name font size
-        run: |
-          sed -i 's/Text(p.name,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))/Text(p.name,fontWeight=FontWeight.Bold,fontSize=14.sp,modifier=Modifier.weight(1f))/' app/src/main/java/com/labuda/app/MainActivity.kt
-      - name: Apply Oswald typography
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          for name in ['MainActivity.kt', 'SettingsActivity.kt']:
-              p = Path('app/src/main/java/com/labuda/app') / name
-              s = p.read_text().replace('Tele2Typography', 'OswaldTypography')
-              if name == 'MainActivity.kt' and 'typography=OswaldTypography' not in s:
-                  marker = 'MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme())'
-                  if marker in s:
-                      s = s.replace(marker, 'MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme(),typography=OswaldTypography)', 1)
-                  else:
-                      raise SystemExit('MainActivity MaterialTheme target not found')
-              p.write_text(s)
-          PY
+        run: sed -i 's/Text(p.name,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))/Text(p.name,fontWeight=FontWeight.Bold,fontSize=14.sp,modifier=Modifier.weight(1f))/' app/src/main/java/com/labuda/app/MainActivity.kt
       - name: Apply subscription and statistics UI fixes
         run: |
           python3 - <<'PY'
@@ -68,13 +50,7 @@ jobs:
           PY
       - name: Create ephemeral CI release signing key
         run: |
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/labuda-release.jks" \
-            -storepass labuda-ci-pass \
-            -keypass labuda-ci-pass \
-            -alias labuda-ci \
-            -keyalg RSA -keysize 3072 -validity 1 \
-            -dname "CN=LABUDA CI,O=LABUDA"
+          keytool -genkeypair -v -keystore "$RUNNER_TEMP/labuda-release.jks" -storepass labuda-ci-pass -keypass labuda-ci-pass -alias labuda-ci -keyalg RSA -keysize 3072 -validity 1 -dname "CN=LABUDA CI,O=LABUDA"
           echo "LABUDA_KEYSTORE_PATH=$RUNNER_TEMP/labuda-release.jks" >> "$GITHUB_ENV"
           echo "LABUDA_KEYSTORE_PASSWORD=labuda-ci-pass" >> "$GITHUB_ENV"
           echo "LABUDA_KEY_ALIAS=labuda-ci" >> "$GITHUB_ENV"
@@ -84,7 +60,7 @@ jobs:
       - name: Verify protected APK
         run: |
           test -f app/build/outputs/apk/release/app-release.apk
-          unzip -l app/build/outputs/apk/release/app-release.apk | grep -q 'classes.dex'
+          unzip -l app/build/outputs/apk/release/app-release.apk | grep -q classes.dex
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/LABUDA1.0.0.0.APK
       - name: Upload protected APK
