@@ -3,8 +3,9 @@ from pathlib import Path
 path = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = path.read_text(encoding="utf-8")
 
-# Normalize compact Kotlin declarations/comparisons where `>=` became ambiguous.
+# Normalize compact Kotlin declarations where `Type>=expression` was tokenized as >=.
 s = s.replace(">=", " >= ")
+s = s.replace("> >=", "> =")
 
 # Keep the suspend helper valid Kotlin.
 s = s.replace(
