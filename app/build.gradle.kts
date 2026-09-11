@@ -12,8 +12,8 @@ android {
         applicationId = "com.labuda.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1000000
-        versionName = "1.0.0.0"
+        versionCode = 1000001
+        versionName = "1.0.0.1"
     }
 
     compileOptions {
@@ -74,6 +74,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
 
     implementation(files("libs/libv2ray.aar"))
 }
