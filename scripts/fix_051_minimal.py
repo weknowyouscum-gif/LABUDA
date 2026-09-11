@@ -3,14 +3,8 @@ from pathlib import Path
 path = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = path.read_text(encoding="utf-8")
 
-# Fix Kotlin declarations that were compacted into the ambiguous `>=` token.
-for old, new in [
-    ("):List<VlessProfile>=", "): List<VlessProfile> ="),
-    ("):List<SubscriptionInfo>=", "): List<SubscriptionInfo> ="),
-    ("):Result<SubscriptionPayload>=", "): Result<SubscriptionPayload> ="),
-    ("):List<SubscriptionInfo> =", "): List<SubscriptionInfo> ="),
-]:
-    s = s.replace(old, new)
+# Normalize compact Kotlin declarations/comparisons where `>=` became ambiguous.
+s = s.replace(">=", " >= ")
 
 # Keep the suspend helper valid Kotlin.
 s = s.replace(
