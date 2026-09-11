@@ -41,35 +41,29 @@ jobs:
       - name: Apply Oswald typography
         run: |
           python3 - <<'PY'
-          import re
           from pathlib import Path
           for name in ['MainActivity.kt', 'SettingsActivity.kt']:
               p = Path('app/src/main/java/com/labuda/app') / name
-              s = p.read_text()
-              s = s.replace('Tele2Typography', 'OswaldTypography')
-              if name == 'MainActivity.kt' and 'OswaldTypography' not in s:
-                  pattern = r'MaterialTheme\(colorScheme=if\(dark\)darkColorScheme\(\)else lightColorScheme\(\)'
-                  s, n = re.subn(pattern, 'MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme(),typography=OswaldTypography', s, count=1)
-                  if n != 1:
-                      raise SystemExit('MaterialTheme target not found; inspect current source before patching')
+              s = p.read_text().replace('Tele2Typography', 'OswaldTypography')
+              if name == 'MainActivity.kt' and 'typography=OswaldTypography' not in s:
+                  marker = 'MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme())'
+                  if marker in s:
+                      s = s.replace(marker, 'MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme(),typography=OswaldTypography)', 1)
+                  else:
+                      raise SystemExit('MainActivity MaterialTheme target not found')
               p.write_text(s)
           PY
       - name: Apply subscription and statistics UI fixes
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
           p = Path('app/src/main/java/com/labuda/app/MainActivity.kt')
           s = p.read_text()
-          replacements = [
-              ('Text(s.title,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))', 'Text("Подписка",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))'),
-              ('storedComment.ifBlank{selectedComment}', 'selectedComment'),
-              ('o.optLong("total",-1).takeIf{it>=0}', 'o.optLong("total",-1).takeIf{it>0}'),
-              ('m["total"],m["expire"]', 'm["total"]?.takeIf{it>0},m["expire"]'),
-          ]
-          for old, new in replacements:
-              if old not in s:
-                  raise SystemExit(f'Target not found: {old}')
-              s = s.replace(old, new, 1)
+          s = re.sub(r'Text\(s\.title,fontWeight=FontWeight\.Bold,modifier=Modifier\.weight\(1f\)\)', 'Text("Подписка",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))', s, count=1)
+          s = s.replace('storedComment.ifBlank{selectedComment}', 'selectedComment.ifBlank{storedComment}', 1)
+          s = s.replace('o.optLong("total",-1).takeIf{it>=0}', 'o.optLong("total",-1).takeIf{it>0}', 1)
+          s = s.replace('m["total"],m["expire"]', 'm["total"]?.takeIf{it>0},m["expire"]', 1)
           p.write_text(s)
           PY
       - name: Create ephemeral CI release signing key
