@@ -22,7 +22,7 @@ class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(typography = Tele2Typography) {
+            MaterialTheme(typography = OswaldTypography) {
                 SettingsScreen(
                     onRouting = { startActivity(Intent(this, RoutingSettingsActivity::class.java)) },
                     onHelp = {
