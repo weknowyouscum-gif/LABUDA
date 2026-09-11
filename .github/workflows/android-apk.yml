@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - labuda-android-8-updates
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
