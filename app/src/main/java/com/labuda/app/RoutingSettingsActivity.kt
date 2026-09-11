@@ -36,6 +36,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 const val MODE_ALL = "all"
 const val MODE_BYPASS = "bypass"
@@ -109,7 +112,13 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
     var selected by remember { mutableStateOf(RoutingStore.selectedApps(context)) }
     var filter by remember { mutableStateOf("all") }
     var search by remember { mutableStateOf("") }
-    val apps = remember { loadApps(context) }
+    var apps by remember { mutableStateOf<List<RoutingApp>>(emptyList()) }
+
+    // The PackageManager/icon scan was blocking the main thread. Run it in the background so Routing opens immediately.
+    LaunchedEffect(Unit) {
+        apps = withContext(Dispatchers.IO) { loadApps(context) }
+    }
+
     val visible = remember(apps, filter, search) {
         val q = search.trim().lowercase()
         apps.filter {
@@ -148,6 +157,7 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
                 OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, "Поиск") }, placeholder = { Text("Поиск приложения") })
                 Text("Приложений: ${visible.size}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
+                if (apps.isEmpty()) Text("Загрузка приложений…", modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     items(visible, key = { it.packageName }) { app ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
