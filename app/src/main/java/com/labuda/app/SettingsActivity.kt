@@ -19,7 +19,7 @@ class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(typography = OswaldTypography) {
+            MaterialTheme {
                 SettingsScreen(
                     onBack = { finish() },
                     onRouting = { startActivity(Intent(this, RoutingSettingsActivity::class.java)) },
