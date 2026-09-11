@@ -28,8 +28,6 @@ jobs:
           mkdir -p app/libs
           curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
-      - name: Apply minimal 0.51 Kotlin cleanup
-        run: python3 scripts/fix_051_minimal.py
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
       - name: Rename APK to LABUDA version format
