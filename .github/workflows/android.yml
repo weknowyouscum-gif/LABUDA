@@ -39,14 +39,16 @@ jobs:
           curl -L --fail --retry 3 -o app/src/main/res/font/tele2_text_sans.ttf \
             https://db.onlinewebfonts.com/t/eaede26ebfc025d4b8715790660fbde9.ttf
           python3 - <<'PY'
+          import re
           from pathlib import Path
           p = Path('app/src/main/java/com/labuda/app/MainActivity.kt')
           s = p.read_text()
-          old = 'MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme()){'
-          new = 'MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme(),typography=Tele2Typography){'
-          if old not in s:
-              raise SystemExit('MaterialTheme target not found')
-          p.write_text(s.replace(old, new, 1))
+          if 'typography=Tele2Typography' not in s:
+              pattern = r'MaterialTheme\(colorScheme=if\(dark\)darkColorScheme\(\)else lightColorScheme\(\)'
+              s, n = re.subn(pattern, 'MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme(),typography=Tele2Typography', s, count=1)
+              if n != 1:
+                  raise SystemExit('MaterialTheme target not found; inspect current source before patching')
+              p.write_text(s)
           PY
       - name: Apply subscription and statistics UI fixes
         run: |
