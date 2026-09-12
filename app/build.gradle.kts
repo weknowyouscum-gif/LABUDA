@@ -12,8 +12,11 @@ android {
         applicationId = "com.labuda.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1000000
-        versionName = "1.0.0.0"
+        versionCode = 1000001
+        versionName = "1.0.0.1"
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     compileOptions {
@@ -24,6 +27,12 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     buildTypes {
@@ -47,6 +56,9 @@ android {
                     storePassword = storePasswordValue
                     keyAlias = keyAliasValue
                     keyPassword = keyPasswordValue
+                    enableV1Signing = true
+                    enableV2Signing = true
+                    enableV3Signing = true
                 }
             }
         }
