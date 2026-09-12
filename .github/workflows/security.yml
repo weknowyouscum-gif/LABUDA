@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ main ]
   push:
-    branches: [ main ]
+    branches: [ main, labuda-android-8-updates ]
   workflow_dispatch:
 
 permissions:
@@ -56,6 +56,21 @@ jobs:
           curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
           test -s app/libs/libv2ray.aar
+      - name: Validate and stabilize Kotlin sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f scripts/fix_052_compile.py
+          python3 scripts/fix_052_compile.py
+          test -f app/src/main/java/com/labuda/app/MainActivity.kt
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/labuda/app/MainActivity.kt')
+          s = p.read_text()
+          assert '@Composable\nprivate fun LabudaApp' in s, 'LabudaApp stabilization was not applied'
+          assert '\nprivate fun normalizeSubscriptionTitle' in s, 'MainActivity structure is incomplete'
+          print('Kotlin source preflight: OK')
+          PY
       - name: Build
         run: gradle --no-daemon --stacktrace assembleDebug
 
@@ -92,6 +107,8 @@ jobs:
           mkdir -p app/libs
           curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
+      - name: Validate and stabilize Kotlin sources
+        run: python3 scripts/fix_052_compile.py
       - name: Build signed release
         env:
           LABUDA_KEYSTORE_PATH: ${{ runner.temp }}/labuda-release.jks
