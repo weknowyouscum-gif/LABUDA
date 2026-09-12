@@ -79,7 +79,7 @@ private fun SettingsScreen(
         Button(
             onSupport, Modifier.fillMaxWidth().height(64.dp), shape = pill,
             colors = ButtonDefaults.buttonColors(containerColor = purple, contentColor = Color.White)
-        ) { Text("Поддержка", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+        ) { Text("Поддержи автора", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
         OutlinedButton(
             onHelp, Modifier.fillMaxWidth().height(64.dp), shape = pill,
             border = BorderStroke(2.dp, purple),
