@@ -249,11 +249,17 @@ private fun StatChip(label: String, value: String, modifier: Modifier = Modifier
 private fun SubscriptionHeader(s: SubscriptionInfo) {
     val number = extractSubscriptionNumber(s.profiles)
     val title = normalizeSubscriptionTitle(s.title)
-    val comment = formatSubscriptionComment(s.comment).ifBlank { if (title != number && title != "Подписка") title else "" }
+    val rawComment = formatSubscriptionComment(s.comment)
+    val headline = number.ifBlank { title }
+    val comment = when {
+        rawComment.isNotBlank() && !rawComment.equals(headline, ignoreCase = true) -> rawComment
+        number.isNotBlank() && title.isNotBlank() && !title.equals(headline, ignoreCase = true) && title != "Подписка" -> title
+        else -> ""
+    }
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(if (number.isNotBlank()) number else title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
+                Text(headline, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
                 if (comment.isNotBlank()) Text(comment, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1)
             }
             Text(if (s.totalBytes == null) "\u221e" else formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0)), color = MaterialTheme.colorScheme.primary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
