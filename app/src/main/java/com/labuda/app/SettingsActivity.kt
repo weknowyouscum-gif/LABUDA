@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 const val LABUDA_SUPPORT_URL = "https://t.me/LABUDASAPP"
+const val LABUDA_DONATE_URL = "https://yoomoney.ru/fundraise/1K8LRRNMB65.260912"
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,7 +41,7 @@ class SettingsActivity : ComponentActivity() {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_SUPPORT_URL)))
                         },
                         onSupport = {
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_SUPPORT_URL)))
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_DONATE_URL)))
                         }
                     )
                 }
