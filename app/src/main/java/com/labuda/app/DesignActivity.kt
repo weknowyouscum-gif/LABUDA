@@ -1,5 +1,6 @@
 package com.labuda.app
 
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -38,14 +39,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.graphics.Color as AndroidColor
 
 class DesignActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -152,7 +152,6 @@ private fun SatValBar(color: Color, onColor: (Color) -> Unit) {
 @Composable
 private fun SpectrumBar(brush: Brush, onPick: (Float) -> Unit) {
     var size by remember { mutableStateOf(IntSize.Zero) }
-    val density = LocalDensity.current
     Box(
         Modifier
             .fillMaxWidth()
@@ -162,10 +161,7 @@ private fun SpectrumBar(brush: Brush, onPick: (Float) -> Unit) {
             .onSizeChanged { size = it }
             .pointerInput(size) {
                 if (size.width <= 0) return@pointerInput
-                fun emit(x: Float) {
-                    onPick((x / size.width.toFloat()).coerceIn(0f, 1f))
-                }
-                detectTapGestures { emit(it.x) }
+                detectTapGestures { onPick((it.x / size.width.toFloat()).coerceIn(0f, 1f)) }
             }
             .pointerInput(size) {
                 if (size.width <= 0) return@pointerInput
@@ -175,11 +171,10 @@ private fun SpectrumBar(brush: Brush, onPick: (Float) -> Unit) {
                 }
             }
     )
-    density.hashCode()
 }
 
 private fun Color.toHsv(): FloatArray {
     val out = FloatArray(3)
-    AndroidColor.colorToHSV(this.toArgb(), out)
+    AndroidColor.colorToHSV(toArgb(), out)
     return out
 }
