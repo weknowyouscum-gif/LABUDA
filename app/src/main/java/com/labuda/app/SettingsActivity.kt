@@ -25,7 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-const val LABUDA_SUPPORT_URL = "https://t.me/LABUDASUP"
+const val LABUDA_SUPPORT_URL = "https://t.me/LABUDASAPP"
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
