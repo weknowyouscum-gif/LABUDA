@@ -1,10 +1,12 @@
 package com.labuda.app
 
+import android.Manifest
 import android.app.StatusBarManager
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.net.VpnService
@@ -16,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import org.json.JSONArray
@@ -26,6 +29,9 @@ import java.net.URLDecoder
 class MainActivity : ComponentActivity() {
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) startVpnService()
+    }
+    private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        prepareVpn()
     }
     private val qrImport = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) {
@@ -77,14 +83,25 @@ class MainActivity : ComponentActivity() {
         }
     }
     fun startVpn() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        prepareVpn()
+    }
+    private fun prepareVpn() {
         val intent = VpnService.prepare(this)
         if (intent != null) vpnPermission.launch(intent) else startVpnService()
     }
-    private fun startVpnService() {
-        startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_START))
+    private fun vpnCommand(action: String) {
+        val intent = Intent(this, LabudaVpnService::class.java).setAction(action)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
     }
-    fun stopVpn() { startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_STOP)) }
-    fun switchVpn() { startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_SWITCH)) }
+    private fun startVpnService() { vpnCommand(LabudaVpnService.ACTION_START) }
+    fun stopVpn() { vpnCommand(LabudaVpnService.ACTION_STOP) }
+    fun switchVpn() { vpnCommand(LabudaVpnService.ACTION_SWITCH) }
 }
 
 object VlessParser {
@@ -115,9 +132,10 @@ object VlessParser {
             }.toMap()
             val sni = q["sni"].orEmpty().ifBlank { q["host"].orEmpty() }
             val remark = runCatching { URLDecoder.decode(uri.fragment.orEmpty(), "UTF-8") }.getOrDefault(uri.fragment.orEmpty())
+            val label = runCatching { formatServerName(remark, "", uri.host.orEmpty(), sni) }.getOrDefault(remark.ifBlank { "Сервер" })
             VlessProfile(
                 raw.hashCode().toString(),
-                formatServerName(remark, "", uri.host.orEmpty(), sni),
+                label,
                 uuid, uri.host!!, if (uri.port > 0) uri.port else 443,
                 q["security"].orEmpty(),
                 q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
