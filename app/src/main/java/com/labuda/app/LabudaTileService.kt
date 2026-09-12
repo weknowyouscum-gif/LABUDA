@@ -14,9 +14,9 @@ class LabudaTileService : TileService() {
     override fun onClick() {
         val running = prefs().getBoolean(KEY_VPN_RUNNING, false)
         if (running) {
-            startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_STOP))
+            startVpn(LabudaVpnService.ACTION_STOP)
             qsTile?.state = Tile.STATE_INACTIVE
-            qsTile?.subtitle = "Отключена"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) qsTile?.subtitle = "Отключена"
             qsTile?.updateTile()
             return
         }
@@ -31,10 +31,15 @@ class LabudaTileService : TileService() {
             }
             return
         }
-        startService(Intent(this, LabudaVpnService::class.java).setAction(LabudaVpnService.ACTION_START))
+        startVpn(LabudaVpnService.ACTION_START)
         qsTile?.state = Tile.STATE_ACTIVE
-        qsTile?.subtitle = "Подключена"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) qsTile?.subtitle = "Подключена"
         qsTile?.updateTile()
+    }
+
+    private fun startVpn(action: String) {
+        val intent = Intent(this, LabudaVpnService::class.java).setAction(action)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
     }
 
     private fun refresh() {
