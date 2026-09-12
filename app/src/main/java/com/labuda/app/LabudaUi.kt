@@ -52,32 +52,66 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
 
+private fun httpHeaders(c: HttpURLConnection): Map<String, String> =
+    c.headerFields.entries.associate { (k, v) -> (k ?: "").lowercase() to v?.firstOrNull().orEmpty() }
+
+private fun bodyMeta(content: String): Map<String, String> {
+    val out = mutableMapOf<String, String>()
+    val keys = setOf(
+        "profile-title", "subscription-name", "profile-comment", "profile-description",
+        "subscription-comment", "subscription-userinfo"
+    )
+    content.lineSequence().take(25).forEach { raw ->
+        var line = raw.trim()
+        if (line.startsWith("#")) line = line.removePrefix("#").trim()
+        if (line.startsWith("//")) line = line.removePrefix("//").trim()
+        val i = line.indexOf(':')
+        if (i <= 0) return@forEach
+        val key = line.substring(0, i).trim().lowercase()
+        val value = line.substring(i + 1).trim()
+        if (key in keys && value.isNotBlank()) out.putIfAbsent(key, value)
+    }
+    return out
+}
+
+private fun metaValue(maps: List<Map<String, String>>, keys: List<String>): String {
+    for (key in keys) {
+        for (m in maps) {
+            val v = m[key]?.trim().orEmpty()
+            if (v.isNotBlank()) return v
+        }
+    }
+    return ""
+}
+
 suspend fun importSubscription(context: Context, input: String): Result<SubscriptionPayload> = withContext(Dispatchers.IO) {
     runCatching {
         val source = input.trim()
         if (source.isBlank()) error("Пустой источник подписки")
-        var title = ""
-        var comment = ""
-        var total: Long? = null
-        var used = 0L
-        var expire: Long? = null
+        var headers = emptyMap<String, String>()
         val content = if (source.startsWith("http://") || source.startsWith("https://")) {
             val c = URL(source).openConnection() as HttpURLConnection
             c.connectTimeout = 15000
             c.readTimeout = 20000
             c.requestMethod = "GET"
-            val h = c.headerFields.entries.associate { (k, v) -> (k ?: "").lowercase() to v?.firstOrNull().orEmpty() }
-            title = h["profile-title"].orEmpty().ifBlank {
-                h["content-disposition"].orEmpty().substringAfter("filename=", "").trim('"', '\'')
-            }
-            comment = listOf("profile-comment", "announce", "announcement", "profile-description", "subscription-comment")
-                .firstNotNullOfOrNull { key -> h[key]?.takeIf { it.isNotBlank() } }
-                .orEmpty()
-            parseUserInfo(h["subscription-userinfo"].orEmpty())?.let {
-                used = it.used; total = it.total; expire = it.expire
-            }
+            headers = httpHeaders(c)
             c.inputStream.bufferedReader().use { it.readText() }.also { c.disconnect() }
         } else source
+        val body = bodyMeta(content)
+        val maps = listOf(headers, body)
+        val title = metaValue(maps, listOf("profile-title", "subscription-name")).ifBlank {
+            headers["content-disposition"].orEmpty().substringAfter("filename=", "").trim('"', '\'')
+        }
+        val comment = metaValue(
+            maps,
+            listOf("profile-comment", "profile-description", "subscription-comment")
+        )
+        var total: Long? = null
+        var used = 0L
+        var expire: Long? = null
+        parseUserInfo(metaValue(maps, listOf("subscription-userinfo"))).let {
+            if (it != null) { used = it.used; total = it.total; expire = it.expire }
+        }
         val profiles = VlessParser.parseSubscription(content)
         if (profiles.isEmpty()) error("В подписке не найдено корректных VLESS-конфигураций")
         SubscriptionPayload(profiles, normalizeSubscriptionTitle(title), formatSubscriptionComment(comment), total, used, expire)
@@ -257,11 +291,8 @@ private fun SubscriptionHeader(s: SubscriptionInfo) {
                 )
                 Text(if (s.totalBytes == null) "\u221e" else "Осталось ${formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0))}", fontSize = 12.sp)
             }
-            if (number.isNotBlank() && normalizeSubscriptionTitle(s.title) != number) {
-                Text(normalizeSubscriptionTitle(s.title), fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            }
             if (comment.isNotBlank()) {
-                Text(comment, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                Text(comment, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2)
             }
             Text("Окончание: ${s.expireAt?.let { formatExpiry(it) } ?: "Без срока"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
