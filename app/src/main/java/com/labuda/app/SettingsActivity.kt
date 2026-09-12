@@ -38,6 +38,9 @@ class SettingsActivity : ComponentActivity() {
                         onRouting = { startActivity(Intent(this, RoutingSettingsActivity::class.java)) },
                         onHelp = {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_SUPPORT_URL)))
+                        },
+                        onSupport = {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_SUPPORT_URL)))
                         }
                     )
                 }
@@ -47,7 +50,12 @@ class SettingsActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SettingsScreen(onBack: () -> Unit, onRouting: () -> Unit, onHelp: () -> Unit) {
+private fun SettingsScreen(
+    onBack: () -> Unit,
+    onRouting: () -> Unit,
+    onHelp: () -> Unit,
+    onSupport: () -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -58,6 +66,9 @@ private fun SettingsScreen(onBack: () -> Unit, onRouting: () -> Unit, onHelp: ()
         }
         Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onRouting)) {
             Text("Маршрутизация", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.titleMedium)
+        }
+        Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onSupport)) {
+            Text("Поддержка", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.titleMedium)
         }
         Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onHelp)) {
             Text("Помощь", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.titleMedium)
