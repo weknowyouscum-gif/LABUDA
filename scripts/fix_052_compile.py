@@ -134,8 +134,7 @@ private fun LabudaApp(activity: MainActivity) {
     }
 
     MaterialTheme(
-        colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
-        typography = OswaldTypography
+        colorScheme = if (dark) darkColorScheme() else lightColorScheme()
     ) {
         Surface(Modifier.fillMaxSize()) {
             if (showImport) {
@@ -173,4 +172,4 @@ private fun LabudaApp(activity: MainActivity) {
 
 s = s[:start] + new_app + s[end:]
 p.write_text(s)
-print("LABUDA 1.0.0.0: stabilized Compose state flow, removed blocking UI refresh, and applied Oswald directly")
+print("LABUDA 1.0.0.0: stabilized Compose state flow, removed blocking UI refresh")
