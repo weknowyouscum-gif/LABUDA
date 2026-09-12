@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
@@ -32,6 +33,11 @@ object DesignStore {
         text = Color(0xFF1C1B1F),
         outline = Color(0xFFCAC4D0)
     )
+
+    fun hasCustom(context: Context): Boolean {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return p.contains(KEY_DESIGN_BG) || p.contains(KEY_DESIGN_TEXT) || p.contains(KEY_DESIGN_OUTLINE)
+    }
 
     fun load(context: Context): DesignColors {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -70,20 +76,30 @@ fun ColorScheme.withDesign(design: DesignColors): ColorScheme {
     )
 }
 
+private fun DesignColors.forMode(dark: Boolean): DesignColors {
+    if (!dark) return this
+    val bg = if (background.luminance() > 0.35f) Color(0xFF121212) else background
+    val fg = if (text.luminance() < 0.45f) Color(0xFFF2F2F2) else text
+    val line = if (outline.luminance() > 0.45f) Color(0xFF8A858E) else outline
+    return DesignColors(bg, fg, line)
+}
+
 @Composable
 fun LabudaTheme(dark: Boolean = false, content: @Composable () -> Unit) {
     val context = LocalContext.current
+    var custom by remember { mutableStateOf(DesignStore.hasCustom(context)) }
     var design by remember { mutableStateOf(DesignStore.load(context)) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(350)
+            custom = DesignStore.hasCustom(context)
             val next = DesignStore.load(context)
             if (next != design) design = next
         }
     }
     val base = if (dark) darkColorScheme() else lightColorScheme()
     MaterialTheme(
-        colorScheme = base.withDesign(design),
+        colorScheme = if (custom) base.withDesign(design.forMode(dark)) else base,
         typography = OswaldTypography,
         content = content
     )
