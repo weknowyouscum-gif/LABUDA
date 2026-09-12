@@ -75,13 +75,13 @@ import java.net.URL
 import java.net.URLDecoder
 import java.net.Socket
 
-private const val PREFS = "labuda"
-private const val KEY_SUB_URL = "subscription_url"
-private const val KEY_PROFILES = "profiles"
-private const val KEY_SELECTED_ID = "selected_profile_id"
-private const val KEY_VPN_RUNNING = "vpn_running"
-private const val KEY_DARK_THEME = "dark_theme"
-private const val KEY_SUBSCRIPTIONS = "subscriptions_json"
+internal const val PREFS = "labuda"
+internal const val KEY_SUB_URL = "subscription_url"
+internal const val KEY_PROFILES = "profiles"
+internal const val KEY_SELECTED_ID = "selected_profile_id"
+internal const val KEY_VPN_RUNNING = "vpn_running"
+internal const val KEY_DARK_THEME = "dark_theme"
+internal const val KEY_SUBSCRIPTIONS = "subscriptions_json"
 
 data class VlessProfile(val id:String,val name:String,val uuid:String,val host:String,val port:Int,val security:String,val network:String,val type:String,val path:String,val sni:String,val fingerprint:String,val publicKey:String,val shortId:String,val raw:String,val latencyMs:Long?=null,val favorite:Boolean=false)
 data class SubscriptionInfo(val id:String,val url:String,val title:String,val comment:String="",val totalBytes:Long?=null,val usedBytes:Long=0L,val expireAt:Long?=null,val profiles:List<VlessProfile> = emptyList())
