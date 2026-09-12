@@ -33,8 +33,6 @@ jobs:
           curl -L --fail --retry 3 -o app/src/main/res/font/oswald.ttf https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf
       - name: Fix legacy Kotlin compile compatibility
         run: python3 scripts/fix_052_compile.py
-      - name: Reduce server name font size
-        run: sed -i 's/Text(p.name,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))/Text(p.name,fontWeight=FontWeight.Bold,fontSize=14.sp,modifier=Modifier.weight(1f))/' app/src/main/java/com/labuda/app/MainActivity.kt
       - name: Apply subscription and statistics UI fixes
         run: |
           python3 - <<'PY'
@@ -42,15 +40,24 @@ jobs:
           from pathlib import Path
           p = Path('app/src/main/java/com/labuda/app/MainActivity.kt')
           s = p.read_text()
-          s = re.sub(r'Text\(s\.title,fontWeight=FontWeight\.Bold,modifier=Modifier\.weight\(1f\)\)', 'Text("Подписка",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))', s, count=1)
+          s = s.replace(
+              'Text(p.name,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))',
+              'Text(p.name,fontWeight=FontWeight.Bold,fontSize=14.sp,modifier=Modifier.weight(1f))',
+          )
+          s = re.sub(
+              r'Text\(s\.title,fontWeight=FontWeight\.Bold,modifier=Modifier\.weight\(1f\)\)',
+              'Text("Подписка",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))',
+              s,
+              count=1,
+          )
           s = s.replace('storedComment.ifBlank{selectedComment}', 'selectedComment.ifBlank{storedComment}', 1)
           s = s.replace('o.optLong("total",-1).takeIf{it>=0}', 'o.optLong("total",-1).takeIf{it>0}', 1)
           s = s.replace('m["total"],m["expire"]', 'm["total"]?.takeIf{it>0},m["expire"]', 1)
           p.write_text(s)
           PY
-      - name: Create ephemeral CI release signing key
+      - name: Create CI release signing key
         run: |
-          keytool -genkeypair -v -keystore "$RUNNER_TEMP/labuda-release.jks" -storepass labuda-ci-pass -keypass labuda-ci-pass -alias labuda-ci -keyalg RSA -keysize 3072 -validity 1 -dname "CN=LABUDA CI,O=LABUDA"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/labuda-release.jks" -storepass labuda-ci-pass -keypass labuda-ci-pass -alias labuda-ci -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=LABUDA CI,O=LABUDA"
           echo "LABUDA_KEYSTORE_PATH=$RUNNER_TEMP/labuda-release.jks" >> "$GITHUB_ENV"
           echo "LABUDA_KEYSTORE_PASSWORD=labuda-ci-pass" >> "$GITHUB_ENV"
           echo "LABUDA_KEY_ALIAS=labuda-ci" >> "$GITHUB_ENV"
@@ -61,11 +68,13 @@ jobs:
         run: |
           test -f app/build/outputs/apk/release/app-release.apk
           unzip -l app/build/outputs/apk/release/app-release.apk | grep -q classes.dex
+          unzip -l app/build/outputs/apk/release/app-release.apk | grep -q 'lib/arm64-v8a/libgojni.so'
+          ! unzip -l app/build/outputs/apk/release/app-release.apk | grep -q 'lib/x86_64/'
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/LABUDA1.0.0.0.APK
+        run: cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/LABUDA-1.0.0.1.apk
       - name: Upload protected APK
         uses: actions/upload-artifact@v4
         with:
-          name: LABUDA-1.0.0.0
-          path: app/build/outputs/apk/release/LABUDA1.0.0.0.APK
+          name: LABUDA-1.0.0.1
+          path: app/build/outputs/apk/release/LABUDA-1.0.0.1.apk
           if-no-files-found: error
