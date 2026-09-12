@@ -66,9 +66,10 @@ jobs:
           test -f app/src/main/java/com/labuda/app/MainActivity.kt
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('app/src/main/java/com/labuda/app/MainActivity.kt')
           s = p.read_text()
-          assert '@Composable\nprivate fun LabudaApp' in s, 'LabudaApp stabilization was not applied'
+          assert re.search(r'@Composable\s+private fun LabudaApp', s), 'LabudaApp stabilization was not applied'
           assert '\nprivate fun normalizeSubscriptionTitle' in s, 'MainActivity structure is incomplete'
           assert 'runBlocking' not in s, 'Main-thread blocking code remains'
           print('Kotlin source preflight: OK')
