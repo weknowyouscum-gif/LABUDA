@@ -30,12 +30,26 @@ private val NeonDarkScheme = darkColorScheme(
     outlineVariant = Color(0xFF3D2B66)
 )
 
+private val NeonLightScheme = lightColorScheme(
+    primary = NeonLine,
+    onPrimary = Color.White,
+    secondary = NeonPurple,
+    background = Color(0xFFF3EDFF),
+    onBackground = Color(0xFF1A1228),
+    surface = Color.White,
+    onSurface = Color(0xFF1A1228),
+    surfaceVariant = Color(0xFFE8DFF8),
+    onSurfaceVariant = Color(0xFF4A3B66),
+    outline = NeonLine,
+    outlineVariant = Color(0xFFC9B6F0)
+)
+
 @Composable
 fun LabudaTheme(dark: Boolean? = null, content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val useDark = dark ?: context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_DARK_THEME, false)
+    val useDark = dark ?: context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_DARK_THEME, true)
     MaterialTheme(
-        colorScheme = if (useDark) NeonDarkScheme else lightColorScheme(primary = NeonPurple),
+        colorScheme = if (useDark) NeonDarkScheme else NeonLightScheme,
         typography = OswaldTypography,
         content = content
     )
