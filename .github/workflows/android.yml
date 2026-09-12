@@ -36,7 +36,7 @@ jobs:
       - name: Apply subscription and statistics UI fixes
         run: |
           python3 - <<'PY'
-          print('LABUDA 1.1.0.2: skip legacy MainActivity string patches')
+          print('LABUDA 1.5.0: skip legacy MainActivity string patches')
           PY
       - name: Create CI release signing key
         run: |
@@ -54,10 +54,10 @@ jobs:
           unzip -l app/build/outputs/apk/release/app-release.apk | grep -q 'lib/arm64-v8a/libgojni.so'
           ! unzip -l app/build/outputs/apk/release/app-release.apk | grep -q 'lib/x86_64/'
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/LABUDA-1.1.0.2.apk
+        run: cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/LABUDA-1.5.0.apk
       - name: Upload protected APK
         uses: actions/upload-artifact@v4
         with:
-          name: LABUDA-1.1.0.2
-          path: app/build/outputs/apk/release/LABUDA-1.1.0.2.apk
+          name: LABUDA-1.5.0
+          path: app/build/outputs/apk/release/LABUDA-1.5.0.apk
           if-no-files-found: error
