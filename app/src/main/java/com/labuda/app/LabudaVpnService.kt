@@ -40,14 +40,25 @@ class LabudaVpnService : VpnService() {
     private var currentProfile: VlessProfile? = null
     private var monitorThread: Thread? = null
     @Volatile private var stopping = false
+    @Volatile private var operationThread: Thread? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopTunnel()
-            ACTION_START -> startTunnel()
-            ACTION_SWITCH -> switchTunnel()
+            ACTION_START -> startTunnelAsync()
+            ACTION_SWITCH -> switchTunnelAsync()
         }
         return START_STICKY
+    }
+
+    private fun startTunnelAsync() {
+        operationThread?.interrupt()
+        operationThread = Thread({ startTunnel() }, "LABUDA-vpn-start").apply { isDaemon = true; start() }
+    }
+
+    private fun switchTunnelAsync() {
+        operationThread?.interrupt()
+        operationThread = Thread({ switchTunnel() }, "LABUDA-vpn-switch").apply { isDaemon = true; start() }
     }
 
     private fun startTunnel() {
@@ -113,7 +124,8 @@ class LabudaVpnService : VpnService() {
         val bypassPrivate=prefs.getBoolean(KEY_BYPASS_PRIVATE,true)
         val routingMode=prefs.getString(KEY_ROUTING_MODE,MODE_ALL).orEmpty().let{when(it){MODE_ALL->MODE_ALL;MODE_TUNNEL->MODE_TUNNEL;else->MODE_BYPASS}}
         val selectedApps=prefs.getStringSet(KEY_ROUTING_APPS,emptySet()).orEmpty()
-        val builder=Builder().setSession("LABUDA LBD").setMtu(1500).setBlocking(false).setMetered(false).addAddress("10.10.0.2",32).addAddress("fd10:10:10::2",128).addRoute("0.0.0.0",0).addRoute("::",0).addDnsServer("1.1.1.1").addDnsServer("8.8.8.8")
+        val builder=Builder().setSession("LABUDA LBD").setMtu(1500).setBlocking(false).addAddress("10.10.0.2",32).addAddress("fd10:10:10::2",128).addRoute("0.0.0.0",0).addRoute("::",0).addDnsServer("1.1.1.1").addDnsServer("8.8.8.8")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
         excludeProxyEndpointRoutes(builder,profile.host);if(bypassPrivate)excludePrivateRoutes(builder)
         if(routingMode==MODE_TUNNEL) selectedApps.forEach{pkg->runCatching{builder.addAllowedApplication(pkg)}} else {runCatching{builder.addDisallowedApplication(packageName)};if(routingMode==MODE_BYPASS)selectedApps.forEach{pkg->runCatching{builder.addDisallowedApplication(pkg)}}}
         val newTun=try{builder.establish()}catch(e:Exception){Log.e(TAG,"TUN establish failed for ${profile.host}: ${e.message}");null}
@@ -135,7 +147,7 @@ class LabudaVpnService : VpnService() {
     private fun excludeProxyEndpointRoutes(b:Builder,host:String){if(Build.VERSION.SDK_INT<Build.VERSION_CODES.TIRAMISU)return;runCatching{InetAddress.getAllByName(host).forEach{a->b.excludeRoute(IpPrefix(a,a.address.size*8))}}}
     private fun waitForSystemVpn():Boolean{val c=getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager;repeat(20){if(c.allNetworks.any{c.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN)==true})return true;try{Thread.sleep(100)}catch(_:InterruptedException){return false}};return false}
     private fun fail(m:String){Log.e(TAG,m);setState(false,m);VpnStats.setComment(this,"Ошибка LBD • $m");updateNotification("Ошибка подключения: $m");cleanup(true)}
-    private fun stopTunnel(){stopping=true;cleanup(false)}
+    private fun stopTunnel(){stopping=true;operationThread?.interrupt();operationThread=null;cleanup(false)}
     private fun cleanup(stopService:Boolean){monitorThread?.interrupt();monitorThread=null;runCatching{xray?.stop()};xray=null;tun?.close();tun=null;currentProfile=null;setState(false,if(stopService)vpnError()else null);VpnStats.setComment(this,if(stopService)"Ошибка LBD • ${vpnError().orEmpty()}"else"Отключено");stopForeground(STOP_FOREGROUND_REMOVE);if(stopService)stopSelf()}
     private fun setState(running:Boolean,error:String?){getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean(KEY_VPN_RUNNING,running).putString(KEY_VPN_ERROR,error).apply()}
     private fun vpnError():String?=getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_VPN_ERROR,null)
@@ -143,5 +155,5 @@ class LabudaVpnService : VpnService() {
     private fun notification(text:String):Notification=if(Build.VERSION.SDK_INT>=26)Notification.Builder(this,CHANNEL).setContentTitle("LABUDA").setContentText(text).setSmallIcon(R.drawable.ic_labuda).setOngoing(true).build()else{@Suppress("DEPRECATION") val n=Notification.Builder(this).setContentTitle("LABUDA").setContentText(text).setSmallIcon(R.drawable.ic_labuda).setOngoing(true).build();n}
     private fun updateNotification(text:String){getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID,notification(text))}
     override fun onRevoke(){cleanup(false);super.onRevoke()}
-    override fun onDestroy(){stopping=true;cleanup(false);super.onDestroy()}
+    override fun onDestroy(){stopping=true;operationThread?.interrupt();cleanup(false);super.onDestroy()}
 }
