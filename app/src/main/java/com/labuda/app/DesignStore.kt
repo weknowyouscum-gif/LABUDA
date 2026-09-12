@@ -16,6 +16,44 @@ val NeonLine = Color(0xFF7A3DFF)
 val NeonText = Color(0xFFF4F0FF)
 val NeonMuted = Color(0xFFB7A8D4)
 
+internal const val KEY_DESIGN_CUSTOM = "design_custom"
+internal const val KEY_DESIGN_BG = "design_bg"
+internal const val KEY_DESIGN_TEXT = "design_text"
+internal const val KEY_DESIGN_OUTLINE = "design_outline"
+
+data class DesignPalette(
+    val custom: Boolean = false,
+    val bg: Long = 0xFF07060C,
+    val text: Long = 0xFFF4F0FF,
+    val outline: Long = 0xFF7A3DFF
+)
+
+object DesignStore {
+    fun load(context: Context): DesignPalette {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return DesignPalette(
+            custom = p.getBoolean(KEY_DESIGN_CUSTOM, false),
+            bg = p.getLong(KEY_DESIGN_BG, 0xFF07060C),
+            text = p.getLong(KEY_DESIGN_TEXT, 0xFFF4F0FF),
+            outline = p.getLong(KEY_DESIGN_OUTLINE, 0xFF7A3DFF)
+        )
+    }
+    fun save(context: Context, palette: DesignPalette) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_DESIGN_CUSTOM, palette.custom)
+            .putLong(KEY_DESIGN_BG, palette.bg)
+            .putLong(KEY_DESIGN_TEXT, palette.text)
+            .putLong(KEY_DESIGN_OUTLINE, palette.outline)
+            .apply()
+    }
+    fun reset(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_DESIGN_CUSTOM, false)
+            .remove(KEY_DESIGN_BG).remove(KEY_DESIGN_TEXT).remove(KEY_DESIGN_OUTLINE)
+            .apply()
+    }
+}
+
 private val NeonDarkScheme = darkColorScheme(
     primary = NeonPurple,
     onPrimary = Color.White,
@@ -48,9 +86,16 @@ private val NeonLightScheme = lightColorScheme(
 fun LabudaTheme(dark: Boolean? = null, content: @Composable () -> Unit) {
     val context = LocalContext.current
     val useDark = dark ?: context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_DARK_THEME, true)
-    MaterialTheme(
-        colorScheme = if (useDark) NeonDarkScheme else NeonLightScheme,
-        typography = OswaldTypography,
-        content = content
+    val palette = DesignStore.load(context)
+    val base = if (useDark) NeonDarkScheme else NeonLightScheme
+    val scheme = if (!palette.custom) base else base.copy(
+        background = Color(palette.bg),
+        onBackground = Color(palette.text),
+        surface = Color(palette.bg),
+        onSurface = Color(palette.text),
+        onSurfaceVariant = Color(palette.text).copy(alpha = 0.72f),
+        outline = Color(palette.outline),
+        outlineVariant = Color(palette.outline).copy(alpha = 0.45f)
     )
+    MaterialTheme(colorScheme = scheme, typography = OswaldTypography, content = content)
 }
