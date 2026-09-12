@@ -12,7 +12,7 @@ android {
         applicationId = "com.labuda.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1100000
+        versionCode = 1100002
         versionName = "1.1.0.0"
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
