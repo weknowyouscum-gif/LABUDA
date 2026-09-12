@@ -62,6 +62,7 @@ jobs:
           set -euo pipefail
           test -f scripts/fix_052_compile.py
           python3 scripts/fix_052_compile.py
+          python3 scripts/optimize_runtime.py
           test -f app/src/main/java/com/labuda/app/MainActivity.kt
           python3 - <<'PY'
           from pathlib import Path
@@ -69,10 +70,11 @@ jobs:
           s = p.read_text()
           assert '@Composable\nprivate fun LabudaApp' in s, 'LabudaApp stabilization was not applied'
           assert '\nprivate fun normalizeSubscriptionTitle' in s, 'MainActivity structure is incomplete'
+          assert 'runBlocking' not in s, 'Main-thread blocking code remains'
           print('Kotlin source preflight: OK')
           PY
       - name: Build
-        run: gradle --no-daemon --stacktrace assembleDebug
+        run: gradle --no-daemon clean --stacktrace assembleDebug
 
   release-signing-gate:
     name: Secure release signing gate
@@ -108,14 +110,16 @@ jobs:
           curl -L --fail --retry 3 -o app/libs/libv2ray.aar \
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
       - name: Validate and stabilize Kotlin sources
-        run: python3 scripts/fix_052_compile.py
+        run: |
+          python3 scripts/fix_052_compile.py
+          python3 scripts/optimize_runtime.py
       - name: Build signed release
         env:
           LABUDA_KEYSTORE_PATH: ${{ runner.temp }}/labuda-release.jks
           LABUDA_KEYSTORE_PASSWORD: ${{ secrets.LABUDA_KEYSTORE_PASSWORD }}
           LABUDA_KEY_ALIAS: ${{ secrets.LABUDA_KEY_ALIAS }}
           LABUDA_KEY_PASSWORD: ${{ secrets.LABUDA_KEY_PASSWORD }}
-        run: gradle --no-daemon --stacktrace assembleRelease
+        run: gradle --no-daemon clean --stacktrace assembleRelease
       - name: Delete signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/labuda-release.jks"
