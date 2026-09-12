@@ -3,6 +3,7 @@ package com.labuda.app
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -159,7 +160,8 @@ fun LabudaApp(activity: MainActivity) {
                         showImport = false
                         importUrl = ""
                     }) else null,
-                    onImport = { runImport(importUrl) }
+                    onImport = { runImport(importUrl) },
+                    onBuy = { activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_BUY_URL))) }
                 )
             } else {
                 MainScreen(
