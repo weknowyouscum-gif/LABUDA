@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,11 +64,8 @@ class DesignActivity : ComponentActivity() {
 @Composable
 private fun DesignScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    var colors by remember { mutableStateOf(DesignStore.load(context)) }
-    fun push(next: DesignColors) {
-        colors = next
-        DesignStore.save(context, next)
-    }
+    val saved = remember { DesignStore.load(context) }
+    var colors by remember { mutableStateOf(saved) }
     Column(
         Modifier.fillMaxSize().background(colors.background).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -80,23 +78,27 @@ private fun DesignScreen(onBack: () -> Unit) {
         }
         OutlinedCard(Modifier.fillMaxWidth()) {
             Text(
-                "Проведите пальцем по полосе — цвет меняется на ходу.",
+                "Проведите пальцем по полосе, затем нажмите «Применить».",
                 modifier = Modifier.padding(16.dp),
                 color = colors.text,
                 fontSize = 14.sp
             )
         }
-        ColorSlot("Фон", colors.background, colors.text, colors.outline) { push(colors.copy(background = it)) }
-        ColorSlot("Буквы", colors.text, colors.text, colors.outline) { push(colors.copy(text = it)) }
-        ColorSlot("Обводка", colors.outline, colors.text, colors.outline) { push(colors.copy(outline = it)) }
+        ColorSlot("Фон", colors.background, colors.text, colors.outline) { colors = colors.copy(background = it) }
+        ColorSlot("Буквы", colors.text, colors.text, colors.outline) { colors = colors.copy(text = it) }
+        ColorSlot("Обводка", colors.outline, colors.text, colors.outline) { colors = colors.copy(outline = it) }
         Spacer(Modifier.weight(1f))
         Button(
             onClick = {
-                DesignStore.reset(context)
-                colors = DesignStore.default
+                DesignStore.save(context, colors)
+                onBack()
             },
             modifier = Modifier.fillMaxWidth().height(46.dp)
-        ) { Text("Сбросить цвета") }
+        ) { Text("Применить") }
+        OutlinedButton(
+            onClick = { colors = DesignStore.default },
+            modifier = Modifier.fillMaxWidth().height(46.dp)
+        ) { Text("Сбросить") }
     }
 }
 
