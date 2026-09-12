@@ -14,14 +14,15 @@ internal fun decodeMaybeBase64(raw: String): String {
     if (value.startsWith("base64:", ignoreCase = true)) {
         value = value.substringAfter(':').trim()
     }
+    if (value.isBlank()) return value
     val padded = padBase64(value)
     val decoded = runCatching {
         String(Base64.decode(padded, Base64.DEFAULT), Charsets.UTF_8).trim()
     }.getOrNull()
-    if (!decoded.isNullOrBlank() && decoded.any { it.isLetter() } && decoded.none { it.code < 9 }) {
+    if (!decoded.isNullOrBlank() && decoded.any { it.isLetter() } && decoded.none { it.code in 1..8 }) {
         return decoded
     }
-    return value
+    return raw.trim()
 }
 
 fun formatSubscriptionTitle(title: String?): String {
@@ -50,7 +51,10 @@ fun formatServerName(name: String, subscriptionTitle: String): String {
         val looksLikeCode = right.matches(Regex("[A-Za-z]\\d{5,}")) || right.matches(Regex("[A-Z0-9_-]{8,}"))
         if (looksLikeCode) value = slash.dropLast(1).joinToString(" / ")
     }
-    value = value.replace(Regex("[\\s|:/\u2022\u00b7\\-_\u2014\u2013]{2,}"), " ")
-    value = value.replace(Regex("\\s+"), " ").trim(' ', '|', '-', ':', '/', '•', '·')
+    value = value.replace(Regex("[\\s|:/\u2022\u00b7]{2,}"), " ")
+    value = value.replace(Regex("\\s+"), " ").trim(' ', '|', ':', '/', '•', '·')
     return value.ifBlank { "Сервер" }
 }
+
+fun normalizeSubscriptionTitle(title: String?): String = formatSubscriptionTitle(title)
+fun cleanServerName(name: String, subscriptionTitle: String): String = formatServerName(name, subscriptionTitle)
