@@ -3,7 +3,7 @@ package com.labuda.app
 import android.util.Base64
 import java.net.URLDecoder
 
-private val ACCOUNT_ID = Regex("(?i)[A-Za-z]\\d{6,}")
+private val ACCOUNT_ID = Regex("(?i)[A-Za-z\u0410-\u044f]\d{8,}")
 
 private fun looksLikeBase64(value: String): Boolean {
     val compact = value.replace("\\s".toRegex(), "")
@@ -53,7 +53,7 @@ fun formatSubscriptionComment(comment: String?): String {
 
 fun extractSubscriptionNumber(profiles: List<VlessProfile>): String {
     for (name in profiles.map { it.name }) {
-        ACCOUNT_ID.findAll(name).lastOrNull()?.value?.let { return it }
+        ACCOUNT_ID.find(name)?.value?.let { return it }
     }
     return ""
 }
@@ -68,14 +68,7 @@ fun formatServerName(name: String, subscriptionTitle: String): String {
         value = value.replace(Regex("^$escaped$sep", RegexOption.IGNORE_CASE), "")
         value = value.replace(Regex("$sep$escaped$", RegexOption.IGNORE_CASE), "")
     }
-    value = value.replace(Regex("[\\s|/]*[A-Za-z]\\d{6,}\\s*$"), "")
-    val slash = value.split(Regex("\\s*/\\s*"))
-    if (slash.size >= 2) {
-        val right = slash.last().trim()
-        if (ACCOUNT_ID.matches(right) || right.matches(Regex("[A-Z0-9_-]{8,}"))) {
-            value = slash.dropLast(1).joinToString(" / ")
-        }
-    }
+    value = ACCOUNT_ID.replace(value, "")
     value = value.replace(Regex("[\\s|:/\u2022\u00b7]{2,}"), " ")
     value = value.replace(Regex("\\s+"), " ").trim(' ', '|', ':', '/', '•', '·')
     return value.ifBlank { "Сервер" }
