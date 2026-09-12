@@ -28,9 +28,28 @@ internal fun decodeMaybeBase64(raw: String): String {
 fun formatSubscriptionTitle(title: String?): String {
     var value = decodeMaybeBase64(title.orEmpty())
     runCatching { value = URLDecoder.decode(value, "UTF-8") }
+    value = value.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
     value = value.replace(Regex("\\.(txt|conf|yaml|yml|json)$", RegexOption.IGNORE_CASE), "").trim()
     if (value.isBlank() || value.equals("subscription", true)) return "Подписка"
     return value
+}
+
+fun formatSubscriptionComment(comment: String?): String {
+    var value = decodeMaybeBase64(comment.orEmpty())
+    runCatching { value = URLDecoder.decode(value, "UTF-8") }
+    value = value.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
+    if (value.equals("Подписка", true) || value.equals("subscription", true)) return ""
+    return value
+}
+
+fun extractSubscriptionNumber(profiles: List<VlessProfile>): String {
+    val fromNames = profiles.map { it.name }
+    for (name in fromNames) {
+        val tail = name.split(Regex("\\s*/\\s*")).lastOrNull()?.trim().orEmpty()
+        if (tail.matches(Regex("[A-Za-z]\\d{5,}")) || tail.matches(Regex("[A-Z][A-Z0-9_-]{7,}"))) return tail
+        Regex("[A-Za-z]\\d{6,}").find(name)?.value?.let { return it }
+    }
+    return ""
 }
 
 fun formatServerName(name: String, subscriptionTitle: String): String {
