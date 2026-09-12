@@ -36,6 +36,40 @@ fun LabudaApp(activity: MainActivity) {
 
     LaunchedEffect(Unit) { prefs.edit().putBoolean(KEY_DARK_THEME, dark).apply() }
 
+    fun runImport(raw: String) {
+        val url = raw.trim()
+        if (url.isBlank() || busy) return
+        importUrl = url
+        busy = true
+        message = ""
+        scope.launch {
+            importSubscription(activity, url).onSuccess { p ->
+                if (subs.any { it.url.trim() == url }) {
+                    message = "Подписка уже добавлена"
+                } else {
+                    val title = normalizeSubscriptionTitle(p.title)
+                    val ready = SubscriptionInfo(
+                        url.hashCode().toString(), url, title, p.comment,
+                        p.totalBytes, p.usedBytes, p.expireAt,
+                        p.profiles.map { it.copy(name = cleanServerName(it.name, title)) }
+                    )
+                    val pinged = withContext(Dispatchers.IO) {
+                        ready.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }
+                    }
+                    val finalSub = ready.copy(profiles = pinged)
+                    subs = subs + finalSub
+                    selected = finalSub.profiles.firstOrNull()
+                    selected?.let { ProfileStore.select(activity, it) }
+                    save()
+                    importUrl = ""
+                    showImport = false
+                    message = "Добавлено серверов: ${finalSub.profiles.size}"
+                }
+            }.onFailure { message = it.message ?: "Не удалось импортировать подписку" }
+            busy = false
+        }
+    }
+
     suspend fun refreshNow() {
         if (subs.isEmpty()) return
         val current = subs
@@ -65,8 +99,8 @@ fun LabudaApp(activity: MainActivity) {
     LaunchedEffect(activity.qrGeneration()) {
         val qr = activity.consumeQrResult()
         if (qr.isNotBlank()) {
-            importUrl = qr
             showImport = true
+            runImport(qr)
         }
     }
     LaunchedEffect(Unit) {
@@ -112,45 +146,14 @@ fun LabudaApp(activity: MainActivity) {
                     onPickQrImage = { activity.pickQrImage() },
                     onClipboard = {
                         val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        importUrl = cm.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
+                        val clip = cm.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
+                        runImport(clip)
                     },
                     onBack = if (subs.isNotEmpty()) ({
                         showImport = false
                         importUrl = ""
                     }) else null,
-                    onImport = {
-                        val url = importUrl.trim()
-                        if (url.isNotBlank() && !busy) {
-                            busy = true
-                            message = ""
-                            scope.launch {
-                                importSubscription(activity, url).onSuccess { p ->
-                                    if (subs.any { it.url.trim() == url }) {
-                                        message = "Подписка уже добавлена"
-                                    } else {
-                                        val title = normalizeSubscriptionTitle(p.title)
-                                        val ready = SubscriptionInfo(
-                                            url.hashCode().toString(), url, title, p.comment,
-                                            p.totalBytes, p.usedBytes, p.expireAt,
-                                            p.profiles.map { it.copy(name = cleanServerName(it.name, title)) }
-                                        )
-                                        val pinged = withContext(Dispatchers.IO) {
-                                            ready.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }
-                                        }
-                                        val finalSub = ready.copy(profiles = pinged)
-                                        subs = subs + finalSub
-                                        selected = finalSub.profiles.firstOrNull()
-                                        selected?.let { ProfileStore.select(activity, it) }
-                                        save()
-                                        importUrl = ""
-                                        showImport = false
-                                        message = "Добавлено серверов: ${finalSub.profiles.size}"
-                                    }
-                                }.onFailure { message = it.message ?: "Не удалось импортировать подписку" }
-                                busy = false
-                            }
-                        }
-                    }
+                    onImport = { runImport(importUrl) }
                 )
             } else {
                 MainScreen(
