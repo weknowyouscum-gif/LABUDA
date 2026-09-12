@@ -4,12 +4,14 @@ from pathlib import Path
 p = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = p.read_text()
 
-# Compose's platform serif is the closest built-in Android equivalent to the
-# requested Times New Roman look without bundling a separate font file.
-if "import androidx.compose.material3.Typography" not in s:
-    s = s.replace("import androidx.compose.material3.Text\n", "import androidx.compose.material3.Text\nimport androidx.compose.material3.Typography\n")
+# Use Compose's built-in serif family as the closest Android system equivalent
+# to the requested Times New Roman appearance without adding a font asset.
 if "import androidx.compose.ui.text.font.FontFamily" not in s:
     s = s.replace("import androidx.compose.ui.text.font.FontWeight\n", "import androidx.compose.ui.text.font.FontFamily\nimport androidx.compose.ui.text.font.FontWeight\n")
+if "import androidx.compose.ui.platform.LocalTextStyle" not in s:
+    s = s.replace("import androidx.compose.ui.text.font.FontWeight\n", "import androidx.compose.ui.platform.LocalTextStyle\nimport androidx.compose.ui.text.font.FontWeight\n")
+if "import androidx.compose.runtime.CompositionLocalProvider" not in s:
+    s = s.replace("import androidx.compose.runtime.Composable\n", "import androidx.compose.runtime.Composable\nimport androidx.compose.runtime.CompositionLocalProvider\n")
 
 start = s.find('@Composable private fun LabudaApp')
 end = s.find('\n\nprivate fun normalizeSubscriptionTitle', start)
@@ -141,37 +143,40 @@ private fun LabudaApp(activity: MainActivity) {
     }
 
     MaterialTheme(
-        colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
-        typography = Typography(defaultFontFamily = FontFamily.Serif)
+        colorScheme = if (dark) darkColorScheme() else lightColorScheme()
     ) {
-        Surface(Modifier.fillMaxSize()) {
-            if (showImport) {
-                ImportScreen(
-                    importUrl,
-                    { importUrl = it },
-                    busy,
-                    message,
-                    { activity.scanQr() },
-                    {
-                        val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        importUrl = cm.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
-                    },
-                    { importOne(importUrl) }
-                )
-            } else {
-                MainScreen(
-                    subs, selected, connected, busy, message, stats, dark,
-                    { value -> dark = value; prefs.edit().putBoolean(KEY_DARK_THEME, value).apply() },
-                    { activity.startActivity(Intent(activity, SettingsActivity::class.java)) },
-                    { profile -> selected = profile; ProfileStore.select(activity, profile); if (connected) activity.switchVpn() },
-                    { if (connected) activity.stopVpn() else activity.startVpn() },
-                    { refreshSubscriptions() },
-                    { importUrl = ""; showImport = true },
-                    { profile ->
-                        subs = subs.map { sub -> sub.copy(profiles = sub.profiles.map { if (it.raw == profile.raw) it.copy(favorite = !it.favorite) else it }) }
-                        saveSubscriptions()
-                    }
-                )
+        CompositionLocalProvider(
+            LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = FontFamily.Serif)
+        ) {
+            Surface(Modifier.fillMaxSize()) {
+                if (showImport) {
+                    ImportScreen(
+                        importUrl,
+                        { importUrl = it },
+                        busy,
+                        message,
+                        { activity.scanQr() },
+                        {
+                            val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            importUrl = cm.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
+                        },
+                        { importOne(importUrl) }
+                    )
+                } else {
+                    MainScreen(
+                        subs, selected, connected, busy, message, stats, dark,
+                        { value -> dark = value; prefs.edit().putBoolean(KEY_DARK_THEME, value).apply() },
+                        { activity.startActivity(Intent(activity, SettingsActivity::class.java)) },
+                        { profile -> selected = profile; ProfileStore.select(activity, profile); if (connected) activity.switchVpn() },
+                        { if (connected) activity.stopVpn() else activity.startVpn() },
+                        { refreshSubscriptions() },
+                        { importUrl = ""; showImport = true },
+                        { profile ->
+                            subs = subs.map { sub -> sub.copy(profiles = sub.profiles.map { if (it.raw == profile.raw) it.copy(favorite = !it.favorite) else it }) }
+                            saveSubscriptions()
+                        }
+                    )
+                }
             }
         }
     }
