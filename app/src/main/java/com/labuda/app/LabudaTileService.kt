@@ -1,5 +1,6 @@
 package com.labuda.app
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.drawable.Icon
 import android.net.VpnService
@@ -15,9 +16,9 @@ class LabudaTileService : TileService() {
     override fun onClick() {
         val running = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_VPN_RUNNING, false)
         if (!running && VpnService.prepare(this) != null) {
-            startActivityAndCollapse(
-                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
+            val launch = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val pi = PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            startActivityAndCollapse(pi)
             return
         }
         val action = if (running) LabudaVpnService.ACTION_STOP else LabudaVpnService.ACTION_START
