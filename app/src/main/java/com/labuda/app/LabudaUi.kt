@@ -70,7 +70,9 @@ suspend fun importSubscription(context: Context, input: String): Result<Subscrip
             title = h["profile-title"].orEmpty().ifBlank {
                 h["content-disposition"].orEmpty().substringAfter("filename=", "").trim('"', '\'')
             }
-            comment = h["profile-comment"].orEmpty().ifBlank { h["profile-description"].orEmpty() }
+            comment = listOf("profile-comment", "announce", "announcement", "profile-description", "subscription-comment")
+                .firstNotNullOfOrNull { key -> h[key]?.takeIf { it.isNotBlank() } }
+                .orEmpty()
             parseUserInfo(h["subscription-userinfo"].orEmpty())?.let {
                 used = it.used; total = it.total; expire = it.expire
             }
@@ -78,7 +80,7 @@ suspend fun importSubscription(context: Context, input: String): Result<Subscrip
         } else source
         val profiles = VlessParser.parseSubscription(content)
         if (profiles.isEmpty()) error("В подписке не найдено корректных VLESS-конфигураций")
-        SubscriptionPayload(profiles, normalizeSubscriptionTitle(title), comment, total, used, expire)
+        SubscriptionPayload(profiles, normalizeSubscriptionTitle(title), formatSubscriptionComment(comment), total, used, expire)
     }
 }
 
@@ -242,14 +244,26 @@ fun MainScreen(
 
 @Composable
 private fun SubscriptionHeader(s: SubscriptionInfo) {
+    val number = extractSubscriptionNumber(s.profiles)
+    val comment = formatSubscriptionComment(s.comment)
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(normalizeSubscriptionTitle(s.title), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
+                Text(
+                    if (number.isNotBlank()) number else normalizeSubscriptionTitle(s.title),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1
+                )
                 Text(if (s.totalBytes == null) "\u221e" else "Осталось ${formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0))}", fontSize = 12.sp)
             }
+            if (number.isNotBlank() && normalizeSubscriptionTitle(s.title) != number) {
+                Text(normalizeSubscriptionTitle(s.title), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            }
+            if (comment.isNotBlank()) {
+                Text(comment, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            }
             Text("Окончание: ${s.expireAt?.let { formatExpiry(it) } ?: "Без срока"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (s.comment.isNotBlank()) Text(s.comment, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
     }
 }
