@@ -14,10 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,11 +32,12 @@ class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(typography = OswaldTypography) {
-                Surface(Modifier.fillMaxSize()) {
+            LabudaTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     SettingsScreen(
                         onBack = { finish() },
                         onRouting = { startActivity(Intent(this, RoutingSettingsActivity::class.java)) },
+                        onDesign = { startActivity(Intent(this, DesignActivity::class.java)) },
                         onHelp = {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_SUPPORT_URL)))
                         },
@@ -54,6 +55,7 @@ class SettingsActivity : ComponentActivity() {
 private fun SettingsScreen(
     onBack: () -> Unit,
     onRouting: () -> Unit,
+    onDesign: () -> Unit,
     onHelp: () -> Unit,
     onSupport: () -> Unit
 ) {
@@ -65,13 +67,16 @@ private fun SettingsScreen(
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Назад") }
             Text("Настройки", style = MaterialTheme.typography.headlineSmall)
         }
-        Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onRouting)) {
+        OutlinedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onRouting)) {
             Text("Маршрутизация", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.titleMedium)
         }
-        Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onSupport)) {
+        OutlinedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onDesign)) {
+            Text("Дизайн", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.titleMedium)
+        }
+        OutlinedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onSupport)) {
             Text("Поддержка", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.titleMedium)
         }
-        Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onHelp)) {
+        OutlinedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onHelp)) {
             Text("Помощь", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.titleMedium)
         }
     }
