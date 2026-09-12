@@ -4,23 +4,6 @@ import android.util.Base64
 import java.net.URLDecoder
 
 private val ACCOUNT_ID = Regex("[A-Za-z][0-9]{8,}", RegexOption.IGNORE_CASE)
-private val IPV4 = Regex("\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b")
-private val IPV6 = Regex("(?i)\\b(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}\\b")
-
-private val COUNTRIES = mapOf(
-    "nl" to "Нидерланды", "de" to "Германия", "fi" to "Финляндия", "se" to "Швеция",
-    "no" to "Норвегия", "dk" to "Дания", "fr" to "Франция", "gb" to "Великобритания",
-    "uk" to "Великобритания", "us" to "США", "ca" to "Канада", "pl" to "Польша",
-    "cz" to "Чехия", "at" to "Австрия", "ch" to "Швейцария", "it" to "Италия",
-    "es" to "Испания", "tr" to "Турция", "ae" to "ОАЭ", "sg" to "Сингапур",
-    "jp" to "Япония", "kr" to "Корея", "au" to "Австралия", "lv" to "Латвия",
-    "lt" to "Литва", "ee" to "Эстония", "ua" to "Украина", "am" to "Армения",
-    "ge" to "Грузия", "kz" to "Казахстан", "ru" to "Россия", "md" to "Молдова",
-    "ro" to "Румыния", "bg" to "Болгария", "hu" to "Венгрия", "sk" to "Словакия",
-    "si" to "Словения", "hr" to "Хорватия", "rs" to "Сербия", "pt" to "Португалия",
-    "ie" to "Ирландия", "be" to "Бельгия", "lu" to "Люксембург", "is" to "Исландия",
-    "in" to "Индия", "hk" to "Гонконг", "tw" to "Тайвань", "br" to "Бразилия"
-)
 
 private fun looksLikeBase64(value: String): Boolean {
     val compact = value.replace("\\s".toRegex(), "")
@@ -75,35 +58,14 @@ fun extractSubscriptionNumber(profiles: List<VlessProfile>): String {
     return ""
 }
 
-private fun isIp(value: String): Boolean {
-    val v = value.trim().trim('[', ']')
-    return IPV4.matches(v) || (':' in v && IPV6.matches(v))
+fun remarkFromRaw(raw: String): String {
+    val i = raw.indexOf('#')
+    if (i < 0 || i == raw.lastIndex) return ""
+    val frag = raw.substring(i + 1).trim()
+    return runCatching { URLDecoder.decode(frag, "UTF-8") }.getOrDefault(frag).trim()
 }
 
-private fun countryFromText(value: String): Pair<String, String?>? {
-    val tokens = value.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotBlank() }
-    for (token in tokens) {
-        val code = token.take(2)
-        val rest = token.drop(2)
-        val country = COUNTRIES[token] ?: COUNTRIES[code]?.takeIf { rest.isEmpty() || rest.all { ch -> ch.isDigit() } }
-        if (country != null) {
-            val num = rest.filter { it.isDigit() }.ifBlank { Regex("\\d+").find(value)?.value }
-            return country to num
-        }
-    }
-    return null
-}
-
-private fun inferCountry(host: String, sni: String): Pair<String, String?>? {
-    return countryFromText(sni) ?: countryFromText(host)
-}
-
-fun formatServerName(
-    name: String,
-    subscriptionTitle: String,
-    host: String = "",
-    sni: String = ""
-): String {
+fun formatServerName(name: String, subscriptionTitle: String, host: String = "", sni: String = ""): String {
     var value = name.trim()
     runCatching { if ('%' in value) value = URLDecoder.decode(value, "UTF-8") }
     val title = formatSubscriptionTitle(subscriptionTitle)
@@ -114,17 +76,9 @@ fun formatServerName(
         value = value.replace(Regex("$sep$escaped$", RegexOption.IGNORE_CASE), "")
     }
     value = ACCOUNT_ID.replace(value, "")
-    value = IPV4.replace(value, " ")
-    value = IPV6.replace(value, " ")
     value = value.replace(Regex("[\\s|:/\u2022\u00b7]{2,}"), " ")
-    value = value.replace(Regex("\\s+"), " ").trim(' ', '|', ':', '/', '•', '·', '-', '_')
-    if (value.isNotBlank() && !isIp(value) && value.any { it.isLetter() }) return value
-    val inferred = inferCountry(host, sni) ?: countryFromText(name)
-    if (inferred != null) {
-        val (country, num) = inferred
-        return if (num.isNullOrBlank()) country else "$country-$num"
-    }
-    return "Сервер"
+    value = value.replace(Regex("\\s+"), " ").trim(' ', '|', ':', '/', '•', '·')
+    return value.ifBlank { "Сервер" }
 }
 
 fun normalizeSubscriptionTitle(title: String?): String = formatSubscriptionTitle(title)
