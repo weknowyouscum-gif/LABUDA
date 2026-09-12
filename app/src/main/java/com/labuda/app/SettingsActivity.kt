@@ -25,6 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+const val LABUDA_SUPPORT_URL = "https://t.me/LABUDASUP"
+
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,7 +37,7 @@ class SettingsActivity : ComponentActivity() {
                         onBack = { finish() },
                         onRouting = { startActivity(Intent(this, RoutingSettingsActivity::class.java)) },
                         onHelp = {
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/LABUDASUPPORT")))
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_SUPPORT_URL)))
                         }
                     )
                 }
