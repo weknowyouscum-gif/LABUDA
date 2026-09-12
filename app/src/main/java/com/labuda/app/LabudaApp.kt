@@ -29,12 +29,14 @@ fun LabudaApp(activity: MainActivity) {
     var selected by remember { mutableStateOf(ProfileStore.selectedProfile(activity)) }
     var importUrl by remember { mutableStateOf("") }
     var showImport by remember { mutableStateOf(subs.isEmpty()) }
+    var showBuy by remember { mutableStateOf(false) }
     var connected by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var stats by remember { mutableStateOf(VpnStatsSnapshot()) }
     val scope = rememberCoroutineScope()
     fun save() = SubscriptionStore.save(activity, subs)
+    fun openUrl(url: String) = activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 
     LaunchedEffect(Unit) { prefs.edit().putBoolean(KEY_DARK_THEME, dark).apply() }
 
@@ -143,8 +145,9 @@ fun LabudaApp(activity: MainActivity) {
 
     LabudaTheme(dark = dark, themeId = themeId) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            if (showImport) {
-                ImportScreen(
+            when {
+                showBuy -> BuyScreen(onBack = { showBuy = false }, onOpen = { openUrl(it) })
+                showImport -> ImportScreen(
                     url = importUrl,
                     onUrl = { importUrl = it },
                     busy = busy,
@@ -161,10 +164,9 @@ fun LabudaApp(activity: MainActivity) {
                         importUrl = ""
                     }) else null,
                     onImport = { runImport(importUrl) },
-                    onBuy = { activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_BUY_URL))) }
+                    onBuy = { showBuy = true }
                 )
-            } else {
-                MainScreen(
+                else -> MainScreen(
                     subs = subs,
                     selected = selected,
                     connected = connected,
