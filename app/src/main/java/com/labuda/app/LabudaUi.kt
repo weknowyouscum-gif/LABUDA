@@ -1,6 +1,7 @@
 package com.labuda.app
 
 import android.content.Context
+import android.util.Base64
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,23 +52,49 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.net.URLDecoder
+
+private fun decodeMaybeBase64(raw: String): String {
+    var value = raw.trim().trim('"', '\'')
+    if (value.startsWith("base64:", ignoreCase = true)) {
+        value = value.substringAfter(':').trim()
+        runCatching {
+            String(Base64.decode(value, Base64.DEFAULT), Charsets.UTF_8)
+        }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+    }
+    val compact = value.replace("\\s".toRegex(), "")
+    if (compact.length >= 8 && compact.matches(Regex("^[A-Za-z0-9+/_=-]+$")) && !value.contains(' ')) {
+        runCatching {
+            String(Base64.decode(compact, Base64.DEFAULT), Charsets.UTF_8)
+        }.getOrNull()?.trim()?.takeIf { decoded ->
+            decoded.isNotBlank() && decoded.any { it.isLetter() } && decoded.none { it.code < 32 && it != '\n' && it != '\r' }
+        }?.let { return it }
+    }
+    return value
+}
 
 fun normalizeSubscriptionTitle(title: String?): String {
-    var value = title.orEmpty().trim()
-    if (value.isBlank()) return "Подписка"
-    value = value.replace(Regex("^base64:", RegexOption.IGNORE_CASE), "").trim()
-    return value.ifBlank { "Подписка" }
+    var value = decodeMaybeBase64(title.orEmpty())
+    runCatching { value = URLDecoder.decode(value, "UTF-8") }
+    value = value.replace(Regex("\\.(txt|conf|yaml|yml|json)$", RegexOption.IGNORE_CASE), "").trim()
+    if (value.isBlank() || value.equals("subscription", true)) return "Подписка"
+    return value
 }
 
 fun cleanServerName(name: String, subscriptionTitle: String): String {
-    var value = name.trim()
-    if (value.isBlank()) return "Сервер"
-    val title = subscriptionTitle.trim()
+    var value = decodeMaybeBase64(name)
+    runCatching { value = URLDecoder.decode(value, "UTF-8") }
+    value = value.trim()
+    val title = normalizeSubscriptionTitle(subscriptionTitle)
     if (title.isNotBlank() && !title.equals("Подписка", true)) {
-        value = value.replace(Regex("^${Regex.escape(title)}\\s*[-|:/\u2022\u00b7]+\\s*", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\s*[-|:/\u2022\u00b7]+\\s*${Regex.escape(title)}$", RegexOption.IGNORE_CASE), "")
+        val escaped = Regex.escape(title)
+        val sep = "[\\s|:/\u2022\u00b7\\-_\u2014\u2013]+"
+        value = value.replace(Regex("^$escaped$sep", RegexOption.IGNORE_CASE), "")
+        value = value.replace(Regex("$sep$escaped$", RegexOption.IGNORE_CASE), "")
+        value = value.replace(Regex(escaped, RegexOption.IGNORE_CASE), " ")
     }
-    value = value.replace(Regex("^base64:", RegexOption.IGNORE_CASE), "").trim()
+    value = value.replace(Regex("$sep".replace("sep", "[\\s|:/\u2022\u00b7\\-_\u2014\u2013]+") , RegexOption.IGNORE_CASE), " ")
+    value = value.replace(Regex("\\s+"), " ").trim(' ', '|', '-', ':', '/', '•', '·')
     return value.ifBlank { "Сервер" }
 }
 
@@ -97,7 +124,7 @@ suspend fun importSubscription(context: Context, input: String): Result<Subscrip
         } else source
         val profiles = VlessParser.parseSubscription(content)
         if (profiles.isEmpty()) error("В подписке не найдено корректных VLESS-конфигураций")
-        SubscriptionPayload(profiles, title.ifBlank { "Подписка" }, comment, total, used, expire)
+        SubscriptionPayload(profiles, normalizeSubscriptionTitle(title), comment, total, used, expire)
     }
 }
 
@@ -264,7 +291,7 @@ private fun SubscriptionHeader(s: SubscriptionInfo) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(s.title, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(normalizeSubscriptionTitle(s.title), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(if (s.totalBytes == null) "\u221e" else "Осталось ${formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0))}", fontSize = 12.sp)
             }
             Text("Окончание: ${s.expireAt?.let { formatExpiry(it) } ?: "Без срока"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
