@@ -3,6 +3,7 @@ package com.labuda.app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -140,7 +141,12 @@ class LabudaVpnService : VpnService() {
     private fun setState(running:Boolean,error:String?){getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean(KEY_VPN_RUNNING,running).putString(KEY_VPN_ERROR,error).apply()}
     private fun vpnError():String?=getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_VPN_ERROR,null)
     private fun createChannel(){if(Build.VERSION.SDK_INT>=26)getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL,"LABUDA LBD",NotificationManager.IMPORTANCE_LOW))}
-    private fun notification(text:String):Notification=if(Build.VERSION.SDK_INT>=26)Notification.Builder(this,CHANNEL).setContentTitle("LABUDA").setContentText(text).setSmallIcon(R.drawable.ic_labuda).setOngoing(true).build()else{@Suppress("DEPRECATION") val n=Notification.Builder(this).setContentTitle("LABUDA").setContentText(text).setSmallIcon(R.drawable.ic_labuda).setOngoing(true).build();n}
+    private fun openApp(): PendingIntent =
+        PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    private fun notification(text:String):Notification {
+        val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
+        return b.setContentTitle("LABUDA").setContentText(text).setSmallIcon(R.drawable.ic_stat_labuda).setContentIntent(openApp()).setOngoing(true).build()
+    }
     private fun updateNotification(text:String){getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID,notification(text))}
     override fun onRevoke(){cleanup(false);super.onRevoke()}
     override fun onDestroy(){stopping=true;cleanup(false);super.onDestroy()}
