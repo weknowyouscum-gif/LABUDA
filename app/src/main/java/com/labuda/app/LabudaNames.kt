@@ -4,6 +4,17 @@ import android.util.Base64
 import java.net.URLDecoder
 
 private val ACCOUNT_ID = Regex("[A-Za-z][0-9]{8,}", RegexOption.IGNORE_CASE)
+private val COUNTRIES = mapOf(
+    "nl" to "Нидерланды", "de" to "Германия", "fi" to "Финляндия", "se" to "Швеция",
+    "no" to "Норвегия", "dk" to "Дания", "fr" to "Франция", "gb" to "Великобритания",
+    "uk" to "Великобритания", "us" to "США", "ca" to "Канада", "pl" to "Польша",
+    "cz" to "Чехия", "at" to "Австрия", "ch" to "Швейцария", "it" to "Италия",
+    "es" to "Испания", "tr" to "Турция", "ae" to "ОАЭ", "sg" to "Сингапур",
+    "jp" to "Япония", "kr" to "Корея", "au" to "Австралия", "lv" to "Латвия",
+    "lt" to "Литва", "ee" to "Эстония", "ua" to "Украина", "am" to "Армения",
+    "ge" to "Грузия", "kz" to "Казахстан", "ru" to "Россия", "md" to "Молдова",
+    "ro" to "Румыния", "bg" to "Болгария", "hu" to "Венгрия", "sk" to "Словакия"
+)
 
 private fun looksLikeBase64(value: String): Boolean {
     val compact = value.replace("\\s".toRegex(), "")
@@ -52,7 +63,7 @@ fun formatSubscriptionComment(comment: String?): String {
 }
 
 fun extractSubscriptionNumber(profiles: List<VlessProfile>): String {
-    for (name in profiles.map { it.name }) {
+    for (name in profiles.flatMap { listOf(it.name, remarkFromRaw(it.raw)) }) {
         ACCOUNT_ID.find(name)?.value?.let { return it }
     }
     return ""
@@ -65,22 +76,54 @@ fun remarkFromRaw(raw: String): String {
     return runCatching { URLDecoder.decode(frag, "UTF-8") }.getOrDefault(frag).trim()
 }
 
-fun formatServerName(name: String, subscriptionTitle: String, host: String = "", sni: String = ""): String {
+fun sharedRemark(profiles: List<VlessProfile>): String {
+    val remarks = profiles.map { formatSubscriptionComment(remarkFromRaw(it.raw)) }.filter { it.isNotBlank() }
+    return remarks.distinct().singleOrNull().orEmpty()
+}
+
+private fun inferCountry(host: String, sni: String): String? {
+    val text = "$sni $host".lowercase()
+    val tokens = text.split(Regex("[^a-z0-9]+")).filter { it.isNotBlank() }
+    for (token in tokens) {
+        COUNTRIES[token]?.let { return it }
+        val code = token.take(2)
+        val rest = token.drop(2)
+        if ((rest.isEmpty() || rest.all { it.isDigit() }) && COUNTRIES[code] != null) {
+            val country = COUNTRIES[code]!!
+            val num = rest.filter { it.isDigit() }
+            return if (num.isBlank()) country else "$country-$num"
+        }
+    }
+    return null
+}
+
+private fun stripLabel(value: String, label: String): String {
+    if (label.isBlank() || label.equals("Подписка", true) || label.length < 3) return value
+    val escaped = Regex.escape(label)
+    val sep = "[\\s|:/\u2022\u00b7\\-_\u2014\u2013]+"
+    return value.replace(Regex("^$escaped$sep", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("$sep$escaped$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex(escaped, RegexOption.IGNORE_CASE), " ")
+}
+
+fun formatServerName(
+    name: String,
+    subscriptionTitle: String,
+    host: String = "",
+    sni: String = "",
+    comment: String = ""
+): String {
     var value = name.trim()
     runCatching { if ('%' in value) value = URLDecoder.decode(value, "UTF-8") }
-    val title = formatSubscriptionTitle(subscriptionTitle)
-    if (title.isNotBlank() && !title.equals("Подписка", true) && title.length >= 3) {
-        val escaped = Regex.escape(title)
-        val sep = "[\\s|:/\u2022\u00b7\\-_\u2014\u2013]+"
-        value = value.replace(Regex("^$escaped$sep", RegexOption.IGNORE_CASE), "")
-        value = value.replace(Regex("$sep$escaped$", RegexOption.IGNORE_CASE), "")
-    }
+    value = stripLabel(value, formatSubscriptionTitle(subscriptionTitle))
+    value = stripLabel(value, formatSubscriptionComment(comment))
     value = ACCOUNT_ID.replace(value, "")
     value = value.replace(Regex("[\\s|:/\u2022\u00b7]{2,}"), " ")
     value = value.replace(Regex("\\s+"), " ").trim(' ', '|', ':', '/', '•', '·')
-    return value.ifBlank { "Сервер" }
+    if (value.isNotBlank() && value.any { it.isLetter() } && !value.equals(formatSubscriptionComment(comment), true)) return value
+    return inferCountry(host, sni) ?: value.ifBlank { "Сервер" }
 }
 
 fun normalizeSubscriptionTitle(title: String?): String = formatSubscriptionTitle(title)
-fun cleanServerName(name: String, subscriptionTitle: String, host: String = "", sni: String = ""): String =
-    formatServerName(name, subscriptionTitle, host, sni)
+fun cleanServerName(name: String, subscriptionTitle: String, host: String = "", sni: String = "", comment: String = ""): String =
+    formatServerName(name, subscriptionTitle, host, sni, comment)
