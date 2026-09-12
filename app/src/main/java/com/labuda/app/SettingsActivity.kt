@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 
 const val LABUDA_SUPPORT_URL = "https://t.me/LABUDASAPP"
 const val LABUDA_DONATE_URL = "https://yoomoney.ru/fundraise/1K8LRRNMB65.260912"
+const val LABUDA_BUY_URL = "https://yoomoney.ru/fundraise/1K8LRRNMB65.260912"
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -152,7 +153,7 @@ private fun ThemeCard(title: String, subtitle: String, id: String, selected: Str
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Text(subtitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (on) Text("✓", color = swatch, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            if (on) Text("\u2713", color = swatch, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
