@@ -66,8 +66,11 @@ private fun httpHeaders(c: HttpURLConnection): Map<String, String> =
 
 private fun bodyMeta(content: String): Map<String, String> {
     val out = mutableMapOf<String, String>()
-    val keys = setOf("profile-title", "subscription-name", "profile-comment", "profile-description", "subscription-comment", "subscription-userinfo")
-    content.lineSequence().take(25).forEach { raw ->
+    val keys = setOf(
+        "profile-title", "subscription-name", "profile-comment", "profile-description",
+        "subscription-comment", "subscription-userinfo", "expire", "profile-expire", "subscription-expire"
+    )
+    content.lineSequence().take(40).forEach { raw ->
         var line = raw.trim()
         if (line.startsWith("#")) line = line.removePrefix("#").trim()
         if (line.startsWith("//")) line = line.removePrefix("//").trim()
@@ -83,6 +86,15 @@ private fun bodyMeta(content: String): Map<String, String> {
 private fun metaValue(maps: List<Map<String, String>>, keys: List<String>): String {
     for (key in keys) for (m in maps) { val v = m[key]?.trim().orEmpty(); if (v.isNotBlank()) return v }
     return ""
+}
+
+private fun parseExpireMillis(raw: String): Long? {
+    val v = raw.trim()
+    if (v.isBlank()) return null
+    v.toLongOrNull()?.takeIf { it > 0 }?.let { return if (it < 10_000_000_000L) it * 1000 else it }
+    return runCatching {
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(v)?.time
+    }.getOrNull()
 }
 
 suspend fun importSubscription(context: Context, input: String): Result<SubscriptionPayload> = withContext(Dispatchers.IO) {
@@ -103,6 +115,7 @@ suspend fun importSubscription(context: Context, input: String): Result<Subscrip
         val comment = metaValue(maps, listOf("profile-comment", "profile-description", "subscription-comment"))
         var total: Long? = null; var used = 0L; var expire: Long? = null
         parseUserInfo(metaValue(maps, listOf("subscription-userinfo")))?.let { used = it.used; total = it.total; expire = it.expire }
+        if (expire == null) expire = parseExpireMillis(metaValue(maps, listOf("expire", "profile-expire", "subscription-expire")))
         val profiles = VlessParser.parseSubscription(content)
         if (profiles.isEmpty()) error("В подписке не найдено корректных VLESS-конфигураций")
         SubscriptionPayload(profiles, normalizeSubscriptionTitle(title), formatSubscriptionComment(comment), total, used, expire)
@@ -213,8 +226,7 @@ fun MainScreen(
             Button(
                 onConnect, Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(28.dp),
                 enabled = selected != null || subs.any { it.profiles.isNotEmpty() },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = Color.White),
-                border = BorderStroke(2.dp, purple)
+                colors = ButtonDefaults.buttonColors(containerColor = purple, contentColor = Color.White)
             ) { Text(if (connected) "Отключить" else "Подключить", fontSize = 17.sp, fontWeight = FontWeight.Bold) }
         }
         Spacer(Modifier.height(14.dp))
@@ -256,13 +268,18 @@ private fun SubscriptionHeader(s: SubscriptionInfo) {
         number.isNotBlank() && title.isNotBlank() && !title.equals(headline, ignoreCase = true) && title != "Подписка" -> title
         else -> ""
     }
+    val left = if (s.totalBytes == null) "\u221e" else formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0))
+    val until = s.expireAt?.let { "до ${formatExpiry(it)}" } ?: "бессрочно"
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(headline, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
                 if (comment.isNotBlank()) Text(comment, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1)
             }
-            Text(if (s.totalBytes == null) "\u221e" else formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0)), color = MaterialTheme.colorScheme.primary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(left, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(until, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
         }
     }
 }
