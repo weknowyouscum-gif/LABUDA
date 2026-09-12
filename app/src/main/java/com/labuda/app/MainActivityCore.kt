@@ -113,14 +113,16 @@ object VlessParser {
             val q = uri.rawQuery.orEmpty().split('&').mapNotNull { p ->
                 p.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to URLDecoder.decode(it[1], "UTF-8") }
             }.toMap()
+            val sni = q["sni"].orEmpty().ifBlank { q["host"].orEmpty() }
+            val remark = runCatching { URLDecoder.decode(uri.fragment.orEmpty(), "UTF-8") }.getOrDefault(uri.fragment.orEmpty())
             VlessProfile(
                 raw.hashCode().toString(),
-                URLDecoder.decode(uri.fragment.orEmpty().ifBlank { uri.host }, "UTF-8"),
+                formatServerName(remark, "", uri.host.orEmpty(), sni),
                 uuid, uri.host!!, if (uri.port > 0) uri.port else 443,
                 q["security"].orEmpty(),
                 q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
                 q["type"].orEmpty().ifBlank { "tcp" },
-                q["path"].orEmpty(), q["sni"].orEmpty().ifBlank { q["host"].orEmpty() },
+                q["path"].orEmpty(), sni,
                 q["fp"].orEmpty(), q["pbk"].orEmpty(), q["sid"].orEmpty(), raw
             )
         } catch (_: Exception) {
