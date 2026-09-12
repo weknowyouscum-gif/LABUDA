@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -162,10 +163,11 @@ fun ImportScreen(
     onImport: () -> Unit
 ) {
     var showQrChoice by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize()) {
+    val purple = MaterialTheme.colorScheme.primary
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (onBack != null) {
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
-                Icon(Icons.Filled.ArrowBack, "Назад")
+                Icon(Icons.Filled.ArrowBack, "Назад", tint = purple)
             }
         }
         Column(
@@ -173,26 +175,60 @@ fun ImportScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("LBD", fontSize = 56.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-            Text("LABUDA", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(32.dp))
-            Card(shape = RoundedCornerShape(24.dp)) {
+            Box(
+                Modifier.size(112.dp).shadow(20.dp, CircleShape).border(3.dp, purple, CircleShape).padding(6.dp).border(2.dp, purple.copy(alpha = 0.4f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("LBD", fontSize = 32.sp, fontWeight = FontWeight.Black, color = purple)
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("LABUDA", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = purple)
+            Spacer(Modifier.height(24.dp))
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, purple.copy(alpha = 0.55f))
+            ) {
                 Column(Modifier.padding(20.dp)) {
-                    Text("Добавить подписку", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Добавить подписку", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = purple)
                     Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(url, onUrl, Modifier.fillMaxWidth(), label = { Text("URL подписки или VLESS") }, singleLine = true)
+                    OutlinedTextField(
+                        url, onUrl, Modifier.fillMaxWidth(),
+                        label = { Text("URL подписки или VLESS") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = purple,
+                            unfocusedBorderColor = purple.copy(alpha = 0.4f),
+                            focusedLabelColor = purple,
+                            cursorColor = purple
+                        )
+                    )
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button({ showQrChoice = true }, Modifier.weight(1f)) { Text("QR") }
-                        Button(onClipboard, Modifier.weight(1f)) {
+                        Button(
+                            { showQrChoice = true }, Modifier.weight(1f).height(46.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = purple, contentColor = Color.White)
+                        ) { Text("QR") }
+                        Button(
+                            onClipboard, Modifier.weight(1f).height(46.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = purple, contentColor = Color.White)
+                        ) {
                             Icon(Icons.Filled.ContentPaste, null)
                             Spacer(Modifier.size(6.dp))
                             Text("Буфер")
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Button(onImport, Modifier.fillMaxWidth(), enabled = !busy && url.isNotBlank()) {
-                        Text(if (busy) "Загрузка…" else "Импортировать подписку")
+                    Button(
+                        onImport, Modifier.fillMaxWidth().height(48.dp),
+                        enabled = !busy && url.isNotBlank(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = purple, contentColor = Color.White),
+                        border = BorderStroke(1.dp, purple)
+                    ) {
+                        Text(if (busy) "Загрузка…" else "Импортировать подписку", fontWeight = FontWeight.Bold)
                     }
                     if (message.isNotBlank()) Text(message, Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -201,15 +237,15 @@ fun ImportScreen(
         if (showQrChoice) {
             AlertDialog(
                 onDismissRequest = { showQrChoice = false },
-                title = { Text("QR-код") },
+                title = { Text("QR-код", color = purple) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button({ showQrChoice = false; onScanQr() }, Modifier.fillMaxWidth()) { Text("Сканировать QR-код") }
-                        Button({ showQrChoice = false; onPickQrImage() }, Modifier.fillMaxWidth()) { Text("Вставить картинку QR-кода") }
+                        Button({ showQrChoice = false; onScanQr() }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = purple)) { Text("Сканировать QR-код") }
+                        Button({ showQrChoice = false; onPickQrImage() }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = purple)) { Text("Вставить картинку QR-кода") }
                     }
                 },
                 confirmButton = {},
-                dismissButton = { TextButton({ showQrChoice = false }) { Text("Отмена") } }
+                dismissButton = { TextButton({ showQrChoice = false }) { Text("Отмена", color = purple) } }
             )
         }
     }
@@ -237,10 +273,7 @@ fun MainScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("LABUDA", fontSize = 24.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
             Icon(Icons.Filled.DarkMode, "Тёмная тема", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            Switch(
-                dark, onDark,
-                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = MaterialTheme.colorScheme.primary)
-            )
+            Switch(dark, onDark, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = MaterialTheme.colorScheme.primary))
             IconButton(onSettings) { Icon(Icons.Filled.Settings, "Настройки", tint = MaterialTheme.colorScheme.primary) }
             IconButton(onRefresh, enabled = !busy) { Icon(Icons.Filled.Refresh, "Обновить", tint = MaterialTheme.colorScheme.primary) }
             IconButton(onImport) { Icon(Icons.Filled.Add, "Добавить", tint = MaterialTheme.colorScheme.primary) }
@@ -248,23 +281,14 @@ fun MainScreen(
         Spacer(Modifier.height(10.dp))
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                Modifier
-                    .size(108.dp)
-                    .shadow(if (connected) 22.dp else 0.dp, CircleShape)
-                    .border(3.dp, ring, CircleShape)
-                    .padding(6.dp)
-                    .border(2.dp, ring.copy(alpha = 0.45f), CircleShape),
+                Modifier.size(108.dp).shadow(if (connected) 22.dp else 0.dp, CircleShape).border(3.dp, ring, CircleShape).padding(6.dp).border(2.dp, ring.copy(alpha = 0.45f), CircleShape),
                 contentAlignment = Alignment.Center
-            ) {
-                Text("LBD", fontSize = 28.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-            }
+            ) { Text("LBD", fontSize = 28.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary) }
             Spacer(Modifier.height(10.dp))
             Text(if (connected) "Лабуда подключена" else "Лабуда отключена", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
             Button(
-                onConnect,
-                Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(16.dp),
+                onConnect, Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp),
                 enabled = selected != null || subs.any { it.profiles.isNotEmpty() },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
@@ -307,34 +331,19 @@ private fun SubscriptionHeader(s: SubscriptionInfo) {
     val number = extractSubscriptionNumber(s.profiles)
     val title = normalizeSubscriptionTitle(s.title)
     val comment = formatSubscriptionComment(s.comment).ifBlank { if (title != number && title != "Подписка") title else "" }
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(if (number.isNotBlank()) number else title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
                 if (comment.isNotBlank()) Text(comment, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
-            Text(
-                if (s.totalBytes == null) "\u221e" else formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0)),
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(if (s.totalBytes == null) "\u221e" else formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0)), color = MaterialTheme.colorScheme.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
-private fun ServerCard(
-    p: VlessProfile,
-    subscriptionTitle: String,
-    selected: VlessProfile?,
-    onSelect: (VlessProfile) -> Unit
-) {
+private fun ServerCard(p: VlessProfile, subscriptionTitle: String, selected: VlessProfile?, onSelect: (VlessProfile) -> Unit) {
     val on = selected?.raw == p.raw || selected?.id == p.id
     Card(
         Modifier.fillMaxWidth().clickable { onSelect(p) },
