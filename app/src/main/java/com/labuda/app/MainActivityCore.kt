@@ -1,10 +1,14 @@
 package com.labuda.app
 
+import android.app.StatusBarManager
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.net.VpnService
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -41,6 +45,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { LabudaApp(this) }
+        offerQuickTile()
+    }
+
+    private fun offerQuickTile() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean("qs_tile_asked", false)) return
+        prefs.edit().putBoolean("qs_tile_asked", true).apply()
+        runCatching {
+            getSystemService(StatusBarManager::class.java).requestAddTileService(
+                ComponentName(this, LabudaTileService::class.java),
+                "LABUDA",
+                Icon.createWithResource(this, R.drawable.ic_stat_labuda),
+                mainExecutor
+            ) { }
+        }
     }
 
     fun scanQr() { qrImport.launch(Intent(this, QrScannerActivity::class.java)) }
@@ -68,7 +88,7 @@ class MainActivity : ComponentActivity() {
 }
 
 object VlessParser {
-    private val PATTERN = Regex("""vless://[^\s\"<>]+""", RegexOption.IGNORE_CASE)
+    private val PATTERN = Regex("""vless://[^\\s\"<>]+""", RegexOption.IGNORE_CASE)
     fun parseSubscription(input: String): List<VlessProfile> {
         val decoded = decode(input.trim())
         return PATTERN.findAll(decoded).map { it.value.trim().trimEnd(',', ';', '\r', '\n') }
