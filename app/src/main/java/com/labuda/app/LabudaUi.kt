@@ -1,7 +1,6 @@
 package com.labuda.app
 
 import android.content.Context
-import android.util.Base64
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,51 +51,6 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
-import java.net.URLDecoder
-
-private fun decodeMaybeBase64(raw: String): String {
-    var value = raw.trim().trim('"', '\'')
-    if (value.startsWith("base64:", ignoreCase = true)) {
-        value = value.substringAfter(':').trim()
-        runCatching {
-            String(Base64.decode(value, Base64.DEFAULT), Charsets.UTF_8)
-        }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
-    }
-    val compact = value.replace("\\s".toRegex(), "")
-    if (compact.length >= 8 && compact.matches(Regex("^[A-Za-z0-9+/_=-]+$")) && !value.contains(' ')) {
-        runCatching {
-            String(Base64.decode(compact, Base64.DEFAULT), Charsets.UTF_8)
-        }.getOrNull()?.trim()?.takeIf { decoded ->
-            decoded.isNotBlank() && decoded.any { it.isLetter() } && decoded.none { it.code < 32 && it != '\n' && it != '\r' }
-        }?.let { return it }
-    }
-    return value
-}
-
-fun normalizeSubscriptionTitle(title: String?): String {
-    var value = decodeMaybeBase64(title.orEmpty())
-    runCatching { value = URLDecoder.decode(value, "UTF-8") }
-    value = value.replace(Regex("\\.(txt|conf|yaml|yml|json)$", RegexOption.IGNORE_CASE), "").trim()
-    if (value.isBlank() || value.equals("subscription", true)) return "Подписка"
-    return value
-}
-
-fun cleanServerName(name: String, subscriptionTitle: String): String {
-    var value = decodeMaybeBase64(name)
-    runCatching { value = URLDecoder.decode(value, "UTF-8") }
-    value = value.trim()
-    val title = normalizeSubscriptionTitle(subscriptionTitle)
-    if (title.isNotBlank() && !title.equals("Подписка", true)) {
-        val escaped = Regex.escape(title)
-        val sep = "[\\s|:/\u2022\u00b7\\-_\u2014\u2013]+"
-        value = value.replace(Regex("^$escaped$sep", RegexOption.IGNORE_CASE), "")
-        value = value.replace(Regex("$sep$escaped$", RegexOption.IGNORE_CASE), "")
-        value = value.replace(Regex(escaped, RegexOption.IGNORE_CASE), " ")
-    }
-    value = value.replace(Regex("$sep".replace("sep", "[\\s|:/\u2022\u00b7\\-_\u2014\u2013]+") , RegexOption.IGNORE_CASE), " ")
-    value = value.replace(Regex("\\s+"), " ").trim(' ', '|', '-', ':', '/', '•', '·')
-    return value.ifBlank { "Сервер" }
-}
 
 suspend fun importSubscription(context: Context, input: String): Result<SubscriptionPayload> = withContext(Dispatchers.IO) {
     runCatching {
@@ -279,7 +233,7 @@ fun MainScreen(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
             subs.forEach { s ->
                 item(key = "sub-${s.id}") { SubscriptionHeader(s) }
-                items(s.profiles, key = { "${s.id}:${it.raw}" }) { p -> ServerCard(p, selected, onSelect, onFavorite) }
+                items(s.profiles, key = { "${s.id}:${it.raw}" }) { p -> ServerCard(p, s.title, selected, onSelect, onFavorite) }
             }
         }
         if (message.isNotBlank()) Text(message, Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -291,7 +245,7 @@ private fun SubscriptionHeader(s: SubscriptionInfo) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(normalizeSubscriptionTitle(s.title), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(normalizeSubscriptionTitle(s.title), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
                 Text(if (s.totalBytes == null) "\u221e" else "Осталось ${formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0))}", fontSize = 12.sp)
             }
             Text("Окончание: ${s.expireAt?.let { formatExpiry(it) } ?: "Без срока"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -301,14 +255,20 @@ private fun SubscriptionHeader(s: SubscriptionInfo) {
 }
 
 @Composable
-private fun ServerCard(p: VlessProfile, selected: VlessProfile?, onSelect: (VlessProfile) -> Unit, onFavorite: (VlessProfile) -> Unit) {
+private fun ServerCard(
+    p: VlessProfile,
+    subscriptionTitle: String,
+    selected: VlessProfile?,
+    onSelect: (VlessProfile) -> Unit,
+    onFavorite: (VlessProfile) -> Unit
+) {
     Card(
         Modifier.fillMaxWidth().clickable { onSelect(p) },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = if (selected?.id == p.id) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(p.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(formatServerName(p.name, subscriptionTitle), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
             Text(p.latencyMs?.let { "$it мс" } ?: "\u2014", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
