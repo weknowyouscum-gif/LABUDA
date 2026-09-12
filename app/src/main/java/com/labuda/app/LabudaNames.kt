@@ -32,7 +32,7 @@ private fun padBase64(value: String): String {
 
 internal fun decodeMaybeBase64(raw: String): String {
     var value = raw.trim().trim('"', '\'')
-    val prefixed = value.startsWith("base64:", ignoreCase = true)
+    val prefixed = value.startsWith("base64:", ignoreCase = true) || value.startsWith("rwEncodeBase64:", ignoreCase = true)
     if (prefixed) value = value.substringAfter(':').trim()
     if (value.isBlank()) return raw.trim()
     if (!prefixed && !looksLikeBase64(value)) return raw.trim()
@@ -40,7 +40,7 @@ internal fun decodeMaybeBase64(raw: String): String {
         String(Base64.decode(padBase64(value), Base64.DEFAULT), Charsets.UTF_8).trim()
     }.getOrNull() ?: return raw.trim()
     if (decoded.isBlank() || decoded.contains('\uFFFD')) return raw.trim()
-    if (decoded.none { it.isLetter() }) return raw.trim()
+    if (decoded.none { it.isLetter() || it.isDigit() }) return raw.trim()
     if (decoded.any { it.code in 1..8 }) return raw.trim()
     return decoded
 }
@@ -50,7 +50,7 @@ fun formatSubscriptionTitle(title: String?): String {
     runCatching { if ('%' in value) value = URLDecoder.decode(value, "UTF-8") }
     value = value.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
     value = value.replace(Regex("\\.(txt|conf|yaml|yml|json)$", RegexOption.IGNORE_CASE), "").trim()
-    if (value.isBlank() || value.equals("subscription", true)) return "Подписка"
+    if (value.isBlank() || value.equals("subscription", true) || value.equals("remnawave", true)) return "Подписка"
     return value
 }
 
@@ -58,7 +58,7 @@ fun formatSubscriptionComment(comment: String?): String {
     var value = decodeMaybeBase64(comment.orEmpty())
     runCatching { if ('%' in value) value = URLDecoder.decode(value, "UTF-8") }
     value = value.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
-    if (value.equals("Подписка", true) || value.equals("subscription", true)) return ""
+    if (value.equals("Подписка", true) || value.equals("subscription", true) || value.equals("remnawave", true)) return ""
     return value
 }
 
@@ -78,7 +78,11 @@ fun remarkFromRaw(raw: String): String {
 
 fun sharedRemark(profiles: List<VlessProfile>): String {
     val remarks = profiles.map { formatSubscriptionComment(remarkFromRaw(it.raw)) }.filter { it.isNotBlank() }
-    return remarks.distinct().singleOrNull().orEmpty()
+    if (remarks.isEmpty()) return ""
+    remarks.distinct().singleOrNull()?.let { return it }
+    val token = remarks.minBy { it.length }.split(Regex("[\\s|:/\u2022\u00b7\\-_\u2014\u2013]+")).firstOrNull().orEmpty()
+    if (token.length >= 2 && remarks.all { it == token || it.startsWith(token) }) return token
+    return ""
 }
 
 private fun inferCountry(host: String, sni: String): String? {
@@ -98,7 +102,7 @@ private fun inferCountry(host: String, sni: String): String? {
 }
 
 private fun stripLabel(value: String, label: String): String {
-    if (label.isBlank() || label.equals("Подписка", true) || label.length < 3) return value
+    if (label.isBlank() || label.equals("Подписка", true) || label.length < 2) return value
     val escaped = Regex.escape(label)
     val sep = "[\\s|:/\u2022\u00b7\\-_\u2014\u2013]+"
     return value.replace(Regex("^$escaped$sep", RegexOption.IGNORE_CASE), "")
