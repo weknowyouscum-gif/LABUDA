@@ -9,25 +9,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
@@ -98,25 +84,29 @@ object VlessParser {
                 .takeIf { it.contains("vless://", true) } ?: v
         } catch (_: Exception) { v }
     }
-    private fun parseUri(raw: String): VlessProfile? = try {
-        val uri = URI(raw)
-        val user = uri.userInfo ?: return null
-        val uuid = user.substringBefore(':')
-        if (uuid.isBlank() || uri.host.isNullOrBlank()) return null
-        val q = uri.rawQuery.orEmpty().split('&').mapNotNull { p ->
-            p.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to URLDecoder.decode(it[1], "UTF-8") }
-        }.toMap()
-        VlessProfile(
-            raw.hashCode().toString(),
-            URLDecoder.decode(uri.fragment.orEmpty().ifBlank { uri.host }, "UTF-8"),
-            uuid, uri.host!!, if (uri.port > 0) uri.port else 443,
-            q["security"].orEmpty(),
-            q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
-            q["type"].orEmpty().ifBlank { "tcp" },
-            q["path"].orEmpty(), q["sni"].orEmpty().ifBlank { q["host"].orEmpty() },
-            q["fp"].orEmpty(), q["pbk"].orEmpty(), q["sid"].orEmpty(), raw
-        )
-    } catch (_: Exception) { null }
+    private fun parseUri(raw: String): VlessProfile? {
+        return try {
+            val uri = URI(raw)
+            val user = uri.userInfo ?: return null
+            val uuid = user.substringBefore(':')
+            if (uuid.isBlank() || uri.host.isNullOrBlank()) return null
+            val q = uri.rawQuery.orEmpty().split('&').mapNotNull { p ->
+                p.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to URLDecoder.decode(it[1], "UTF-8") }
+            }.toMap()
+            VlessProfile(
+                raw.hashCode().toString(),
+                URLDecoder.decode(uri.fragment.orEmpty().ifBlank { uri.host }, "UTF-8"),
+                uuid, uri.host!!, if (uri.port > 0) uri.port else 443,
+                q["security"].orEmpty(),
+                q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
+                q["type"].orEmpty().ifBlank { "tcp" },
+                q["path"].orEmpty(), q["sni"].orEmpty().ifBlank { q["host"].orEmpty() },
+                q["fp"].orEmpty(), q["pbk"].orEmpty(), q["sid"].orEmpty(), raw
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
 }
 
 object ProfileStore {
