@@ -82,3 +82,8 @@ private const val KEY_SELECTED_ID = "selected_profile_id"
 private const val KEY_VPN_RUNNING = "vpn_running"
 private const val KEY_DARK_THEME = "dark_theme"
 private const val KEY_SUBSCRIPTIONS = "subscriptions_json"
+
+data class VlessProfile(val id:String,val name:String,val uuid:String,val host:String,val port:Int,val security:String,val network:String,val type:String,val path:String,val sni:String,val fingerprint:String,val publicKey:String,val shortId:String,val raw:String,val latencyMs:Long?=null,val favorite:Boolean=false)
+data class SubscriptionInfo(val id:String,val url:String,val title:String,val comment:String="",val totalBytes:Long?=null,val usedBytes:Long=0L,val expireAt:Long?=null,val profiles:List<VlessProfile> = emptyList())
+data class SubscriptionPayload(val profiles:List<VlessProfile>,val title:String,val comment:String,val totalBytes:Long?,val usedBytes:Long,val expireAt:Long?)
+data class VpnStatsSnapshot(val trafficBytes:Long=0L,val rxBytes:Long=0L,val txBytes:Long=0L,val rxSpeed:Long=0L,val txSpeed:Long=0L,val comment:String="")
