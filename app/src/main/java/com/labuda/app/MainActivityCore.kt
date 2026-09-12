@@ -1,13 +1,10 @@
 package com.labuda.app
 
 import android.Manifest
-import android.app.StatusBarManager
 import android.content.ClipboardManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.Icon
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -51,22 +48,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { LabudaApp(this) }
-        offerQuickTile()
-    }
-
-    private fun offerQuickTile() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        if (prefs.getBoolean("qs_tile_asked", false)) return
-        prefs.edit().putBoolean("qs_tile_asked", true).apply()
-        runCatching {
-            getSystemService(StatusBarManager::class.java).requestAddTileService(
-                ComponentName(this, LabudaTileService::class.java),
-                "LABUDA",
-                Icon.createWithResource(this, R.drawable.ic_stat_labuda),
-                mainExecutor
-            ) { }
-        }
     }
 
     fun scanQr() { qrImport.launch(Intent(this, QrScannerActivity::class.java)) }
@@ -123,7 +104,7 @@ object VlessParser {
     }
     private fun parseUri(raw: String): VlessProfile? {
         return try {
-            val uri = URI(raw)
+            val uri = URI(raw.substringBefore('#'))
             val user = uri.userInfo ?: return null
             val uuid = user.substringBefore(':')
             if (uuid.isBlank() || uri.host.isNullOrBlank()) return null
@@ -131,11 +112,10 @@ object VlessParser {
                 p.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to URLDecoder.decode(it[1], "UTF-8") }
             }.toMap()
             val sni = q["sni"].orEmpty().ifBlank { q["host"].orEmpty() }
-            val remark = runCatching { URLDecoder.decode(uri.fragment.orEmpty(), "UTF-8") }.getOrDefault(uri.fragment.orEmpty())
-            val label = runCatching { formatServerName(remark, "", uri.host.orEmpty(), sni) }.getOrDefault(remark.ifBlank { "Сервер" })
+            val remark = remarkFromRaw(raw)
             VlessProfile(
                 raw.hashCode().toString(),
-                label,
+                formatServerName(remark, "", uri.host.orEmpty(), sni),
                 uuid, uri.host!!, if (uri.port > 0) uri.port else 443,
                 q["security"].orEmpty(),
                 q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
