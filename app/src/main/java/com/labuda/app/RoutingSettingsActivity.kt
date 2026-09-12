@@ -118,7 +118,6 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
     var filter by remember { mutableStateOf("all") }
     var search by remember { mutableStateOf("") }
     var apps by remember { mutableStateOf<List<RoutingApp>>(emptyList()) }
-    val purple = MaterialTheme.colorScheme.primary
 
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { loadApps(context) }
@@ -135,6 +134,7 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
         }.filter { q.isBlank() || it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q) }
     }
     LabudaTheme {
+        val purple = MaterialTheme.colorScheme.primary
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
