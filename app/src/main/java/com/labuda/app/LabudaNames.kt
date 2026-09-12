@@ -3,6 +3,8 @@ package com.labuda.app
 import android.util.Base64
 import java.net.URLDecoder
 
+private val ACCOUNT_ID = Regex("(?i)[A-Za-z]\\d{6,}")
+
 private fun looksLikeBase64(value: String): Boolean {
     val compact = value.replace("\\s".toRegex(), "")
     if (compact.length < 12) return false
@@ -51,9 +53,7 @@ fun formatSubscriptionComment(comment: String?): String {
 
 fun extractSubscriptionNumber(profiles: List<VlessProfile>): String {
     for (name in profiles.map { it.name }) {
-        val tail = name.split(Regex("\\s*/\\s*")).lastOrNull()?.trim().orEmpty()
-        if (tail.matches(Regex("[A-Za-z]\\d{5,}")) || tail.matches(Regex("[A-Z][A-Z0-9_-]{7,}"))) return tail
-        Regex("[A-Za-z]\\d{6,}").find(name)?.value?.let { return it }
+        ACCOUNT_ID.findAll(name).lastOrNull()?.value?.let { return it }
     }
     return ""
 }
@@ -61,9 +61,6 @@ fun extractSubscriptionNumber(profiles: List<VlessProfile>): String {
 fun formatServerName(name: String, subscriptionTitle: String): String {
     var value = name.trim()
     runCatching { if ('%' in value) value = URLDecoder.decode(value, "UTF-8") }
-    value = value.replace(Regex("[\uD83C][\uDDE6-\uDDFF]"), "")
-    value = value.replace(Regex("[\uFE0F\u200D]"), "")
-    value = value.trim()
     val title = formatSubscriptionTitle(subscriptionTitle)
     if (title.isNotBlank() && !title.equals("Подписка", true) && title.length >= 3) {
         val escaped = Regex.escape(title)
@@ -71,11 +68,13 @@ fun formatServerName(name: String, subscriptionTitle: String): String {
         value = value.replace(Regex("^$escaped$sep", RegexOption.IGNORE_CASE), "")
         value = value.replace(Regex("$sep$escaped$", RegexOption.IGNORE_CASE), "")
     }
+    value = value.replace(Regex("[\\s|/]*[A-Za-z]\\d{6,}\\s*$"), "")
     val slash = value.split(Regex("\\s*/\\s*"))
     if (slash.size >= 2) {
         val right = slash.last().trim()
-        val looksLikeCode = right.matches(Regex("[A-Za-z]\\d{5,}")) || right.matches(Regex("[A-Z0-9_-]{8,}"))
-        if (looksLikeCode) value = slash.dropLast(1).joinToString(" / ")
+        if (ACCOUNT_ID.matches(right) || right.matches(Regex("[A-Z0-9_-]{8,}"))) {
+            value = slash.dropLast(1).joinToString(" / ")
+        }
     }
     value = value.replace(Regex("[\\s|:/\u2022\u00b7]{2,}"), " ")
     value = value.replace(Regex("\\s+"), " ").trim(' ', '|', ':', '/', '•', '·')
