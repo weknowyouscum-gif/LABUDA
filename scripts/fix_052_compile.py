@@ -1,10 +1,12 @@
 from pathlib import Path
 
-# LABUDA 1.0.0.0 build-time compatibility and stabilization patch.
+# LABUDA build-time compatibility patch. Must stay in sync with ImportScreen signature.
 p = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = p.read_text()
 
 start = s.find('@Composable private fun LabudaApp')
+if start < 0:
+    start = s.find('@Composable\nprivate fun LabudaApp')
 end = s.find('\n\nprivate fun normalizeSubscriptionTitle', start)
 if start < 0 or end < 0:
     raise SystemExit('LabudaApp block boundaries not found')
@@ -25,12 +27,15 @@ private fun LabudaApp(activity: MainActivity) {
 
     fun saveSubscriptions() = SubscriptionStore.save(activity, subs)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(activity.qrGeneration()) {
         val qr = activity.consumeQrResult()
         if (qr.isNotBlank()) {
             importUrl = qr
             showImport = true
         }
+    }
+
+    LaunchedEffect(Unit) {
         if (subs.isNotEmpty()) {
             val updated = withContext(Dispatchers.IO) {
                 subs.map { sub ->
@@ -145,10 +150,12 @@ private fun LabudaApp(activity: MainActivity) {
                     busy,
                     message,
                     { activity.scanQr() },
+                    { activity.pickQrImage() },
                     {
                         val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         importUrl = cm.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
                     },
+                    if (subs.isNotEmpty()) ({ showImport = false; importUrl = "" }) else null,
                     { importOne(importUrl) }
                 )
             } else {
@@ -173,4 +180,4 @@ private fun LabudaApp(activity: MainActivity) {
 
 s = s[:start] + new_app + s[end:]
 p.write_text(s)
-print("LABUDA 1.0.0.0: stabilized Compose state flow, removed blocking UI refresh, and applied Oswald directly")
+print("LABUDA: LabudaApp patch synced with QR image pick and import back arrow")
