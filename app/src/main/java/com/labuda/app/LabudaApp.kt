@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 fun LabudaApp(activity: MainActivity) {
     val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     var dark by remember { mutableStateOf(true) }
+    var themeId by remember { mutableStateOf(DesignStore.themeId(activity)) }
     var subs by remember { mutableStateOf(SubscriptionStore.load(activity)) }
     var selected by remember { mutableStateOf(ProfileStore.selectedProfile(activity)) }
     var importUrl by remember { mutableStateOf("") }
@@ -117,6 +118,7 @@ fun LabudaApp(activity: MainActivity) {
     LaunchedEffect(Unit) {
         while (true) {
             connected = prefs.getBoolean(KEY_VPN_RUNNING, false)
+            themeId = DesignStore.themeId(activity)
             val rx = prefs.getLong(VpnStats.KEY_RX, 0)
             val tx = prefs.getLong(VpnStats.KEY_TX, 0)
             val err = prefs.getString("vpn_error", null)
@@ -138,7 +140,7 @@ fun LabudaApp(activity: MainActivity) {
         }
     }
 
-    LabudaTheme(dark = dark) {
+    LabudaTheme(dark = dark, themeId = themeId) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             if (showImport) {
                 ImportScreen(
