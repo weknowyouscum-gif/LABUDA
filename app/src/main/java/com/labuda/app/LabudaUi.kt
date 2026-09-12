@@ -1,7 +1,9 @@
 package com.labuda.app
 
 import android.content.Context
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -33,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,6 +46,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -102,10 +108,7 @@ suspend fun importSubscription(context: Context, input: String): Result<Subscrip
         val title = metaValue(maps, listOf("profile-title", "subscription-name")).ifBlank {
             headers["content-disposition"].orEmpty().substringAfter("filename=", "").trim('"', '\'')
         }
-        val comment = metaValue(
-            maps,
-            listOf("profile-comment", "profile-description", "subscription-comment")
-        )
+        val comment = metaValue(maps, listOf("profile-comment", "profile-description", "subscription-comment"))
         var total: Long? = null
         var used = 0L
         var expire: Long? = null
@@ -170,7 +173,7 @@ fun ImportScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("LBD", fontSize = 56.sp, fontWeight = FontWeight.Black)
+            Text("LBD", fontSize = 56.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
             Text("LABUDA", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(32.dp))
             Card(shape = RoundedCornerShape(24.dp)) {
@@ -229,47 +232,60 @@ fun MainScreen(
     onImport: () -> Unit,
     onFavorite: (VlessProfile) -> Unit
 ) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp).padding(top = 32.dp)) {
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("LABUDA", fontSize = 24.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-            Icon(Icons.Filled.DarkMode, "Тёмная тема", Modifier.size(18.dp))
-            Switch(dark, onDark)
-            IconButton(onSettings) { Icon(Icons.Filled.Settings, "Настройки") }
-            IconButton(onRefresh, enabled = !busy) { Icon(Icons.Filled.Refresh, "Обновить") }
-            IconButton(onImport) { Icon(Icons.Filled.Add, "Добавить") }
-        }
-        Spacer(Modifier.height(5.dp))
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
-            Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    Modifier.size(82.dp).background(MaterialTheme.colorScheme.onSurfaceVariant, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("LBD", fontSize = 28.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.surface)
-                }
-                Spacer(Modifier.height(5.dp))
-                Text(if (connected) "Лабуда подключена" else "Лабуда отключена", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-                Button(
-                    onConnect,
-                    Modifier.fillMaxWidth().height(42.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    enabled = selected != null || subs.any { it.profiles.isNotEmpty() }
-                ) { Text(if (connected) "Отключить" else "Подключить", fontSize = 15.sp) }
-            }
-        }
-        Spacer(Modifier.height(5.dp))
-        VpnStatsCard(stats)
-        Spacer(Modifier.height(6.dp))
+    val ring = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 14.dp).padding(top = 28.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Подписки (${subs.size})", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (busy) Text("Обновление…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("LABUDA", fontSize = 24.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+            Icon(Icons.Filled.DarkMode, "Тёмная тема", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            Switch(
+                dark, onDark,
+                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = MaterialTheme.colorScheme.primary)
+            )
+            IconButton(onSettings) { Icon(Icons.Filled.Settings, "Настройки", tint = MaterialTheme.colorScheme.primary) }
+            IconButton(onRefresh, enabled = !busy) { Icon(Icons.Filled.Refresh, "Обновить", tint = MaterialTheme.colorScheme.primary) }
+            IconButton(onImport) { Icon(Icons.Filled.Add, "Добавить", tint = MaterialTheme.colorScheme.primary) }
         }
-        Spacer(Modifier.height(4.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Spacer(Modifier.height(10.dp))
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier
+                    .size(108.dp)
+                    .shadow(if (connected) 22.dp else 0.dp, CircleShape)
+                    .border(3.dp, ring, CircleShape)
+                    .padding(6.dp)
+                    .border(2.dp, ring.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("LBD", fontSize = 28.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(if (connected) "Лабуда подключена" else "Лабуда отключена", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onConnect,
+                Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                enabled = selected != null || subs.any { it.profiles.isNotEmpty() },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+            ) { Text(if (connected) "Отключить" else "Подключить", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatChip("ТРАФИК", formatBytes(stats.trafficBytes), Modifier.weight(1f))
+            StatChip("ВХОД", formatBytes(stats.rxBytes), Modifier.weight(1f))
+            StatChip("ВЫХОД", formatBytes(stats.txBytes), Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Подписки", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            if (busy) Text("Обновление…", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(6.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             subs.forEach { s ->
                 item(key = "sub-${s.id}") { SubscriptionHeader(s) }
-                items(s.profiles, key = { "${s.id}:${it.raw}" }) { p -> ServerCard(p, s.title, selected, onSelect, onFavorite) }
+                items(s.profiles, key = { "${s.id}:${it.raw}" }) { p -> ServerCard(p, s.title, selected, onSelect) }
             }
         }
         if (message.isNotBlank()) Text(message, Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -277,24 +293,37 @@ fun MainScreen(
 }
 
 @Composable
+private fun StatChip(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier, shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
 private fun SubscriptionHeader(s: SubscriptionInfo) {
     val number = extractSubscriptionNumber(s.profiles)
-    val comment = formatSubscriptionComment(s.comment)
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (number.isNotBlank()) number else normalizeSubscriptionTitle(s.title),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1
-                )
-                Text(if (s.totalBytes == null) "\u221e" else "Осталось ${formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0))}", fontSize = 12.sp)
+    val title = normalizeSubscriptionTitle(s.title)
+    val comment = formatSubscriptionComment(s.comment).ifBlank { if (title != number && title != "Подписка") title else "" }
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(if (number.isNotBlank()) number else title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
+                if (comment.isNotBlank()) Text(comment, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
-            if (comment.isNotBlank()) {
-                Text(comment, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2)
-            }
-            Text("Окончание: ${s.expireAt?.let { formatExpiry(it) } ?: "Без срока"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (s.totalBytes == null) "\u221e" else formatBytes((s.totalBytes - s.usedBytes).coerceAtLeast(0)),
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -304,32 +333,18 @@ private fun ServerCard(
     p: VlessProfile,
     subscriptionTitle: String,
     selected: VlessProfile?,
-    onSelect: (VlessProfile) -> Unit,
-    onFavorite: (VlessProfile) -> Unit
+    onSelect: (VlessProfile) -> Unit
 ) {
+    val on = selected?.raw == p.raw || selected?.id == p.id
     Card(
         Modifier.fillMaxWidth().clickable { onSelect(p) },
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = if (selected?.id == p.id) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(if (on) 1.5.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.28f))
     ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(formatServerName(p.name, subscriptionTitle), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
-            Text(p.latencyMs?.let { "$it мс" } ?: "\u2014", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
-private fun VpnStatsCard(s: VpnStatsSnapshot) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) {
-            Text("Статистика", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text("Трафик: ${formatBytes(s.trafficBytes)}", fontSize = 13.sp)
-            if (s.comment.isNotBlank()) Text("Комментарий: ${s.comment}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Вход: ${formatBytes(s.rxBytes)}", fontSize = 12.sp)
-                Text("Выход: ${formatBytes(s.txBytes)}", fontSize = 12.sp)
-            }
+            Text(p.latencyMs?.let { "$it мс" } ?: "\u2014", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
         }
     }
 }
