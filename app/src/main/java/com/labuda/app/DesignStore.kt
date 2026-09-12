@@ -6,7 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -14,9 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.delay
 
 internal const val KEY_DESIGN_BG = "design_bg"
 internal const val KEY_DESIGN_TEXT = "design_text"
@@ -58,7 +56,7 @@ object DesignStore {
     }
 }
 
-fun ColorScheme.withDesign(design: DesignColors, dark: Boolean): ColorScheme {
+fun ColorScheme.withDesign(design: DesignColors): ColorScheme {
     val faded = design.text.copy(alpha = 0.68f)
     return copy(
         background = design.background,
@@ -68,27 +66,24 @@ fun ColorScheme.withDesign(design: DesignColors, dark: Boolean): ColorScheme {
         onSurface = design.text,
         onSurfaceVariant = faded,
         outline = design.outline,
-        outlineVariant = design.outline,
-        primary = if (dark) design.text else design.outline,
-        onPrimary = design.background
+        outlineVariant = design.outline
     )
 }
 
 @Composable
 fun LabudaTheme(dark: Boolean = false, content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val owner = LocalLifecycleOwner.current
     var design by remember { mutableStateOf(DesignStore.load(context)) }
-    DisposableEffect(owner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) design = DesignStore.load(context)
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(350)
+            val next = DesignStore.load(context)
+            if (next != design) design = next
         }
-        owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer) }
     }
     val base = if (dark) darkColorScheme() else lightColorScheme()
     MaterialTheme(
-        colorScheme = base.withDesign(design, dark),
+        colorScheme = base.withDesign(design),
         typography = OswaldTypography,
         content = content
     )
