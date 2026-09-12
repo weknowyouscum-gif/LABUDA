@@ -39,7 +39,6 @@ class SettingsActivity : ComponentActivity() {
                     SettingsScreen(
                         onBack = { finish() },
                         onRouting = { startActivity(Intent(this, RoutingSettingsActivity::class.java)) },
-                        onDesign = { startActivity(Intent(this, DesignActivity::class.java)) },
                         onHelp = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_SUPPORT_URL))) },
                         onSupport = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LABUDA_DONATE_URL))) }
                     )
@@ -53,7 +52,6 @@ class SettingsActivity : ComponentActivity() {
 private fun SettingsScreen(
     onBack: () -> Unit,
     onRouting: () -> Unit,
-    onDesign: () -> Unit,
     onHelp: () -> Unit,
     onSupport: () -> Unit
 ) {
@@ -67,9 +65,6 @@ private fun SettingsScreen(
         }
         Button(onRouting, Modifier.fillMaxWidth().height(52.dp)) {
             Text("Маршрутизация", fontSize = 16.sp)
-        }
-        Button(onDesign, Modifier.fillMaxWidth().height(52.dp)) {
-            Text("Дизайн", fontSize = 16.sp)
         }
         Button(onSupport, Modifier.fillMaxWidth().height(52.dp)) {
             Text("Поддержка", fontSize = 16.sp)
