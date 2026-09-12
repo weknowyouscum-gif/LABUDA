@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun LabudaApp(activity: MainActivity) {
     val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    var dark by remember { mutableStateOf(prefs.getBoolean(KEY_DARK_THEME, false)) }
+    var dark by remember { mutableStateOf(true) }
     var subs by remember { mutableStateOf(SubscriptionStore.load(activity)) }
     var selected by remember { mutableStateOf(ProfileStore.selectedProfile(activity)) }
     var importUrl by remember { mutableStateOf("") }
@@ -33,6 +33,8 @@ fun LabudaApp(activity: MainActivity) {
     var stats by remember { mutableStateOf(VpnStatsSnapshot()) }
     val scope = rememberCoroutineScope()
     fun save() = SubscriptionStore.save(activity, subs)
+
+    LaunchedEffect(Unit) { prefs.edit().putBoolean(KEY_DARK_THEME, dark).apply() }
 
     suspend fun refreshNow() {
         if (subs.isEmpty()) return
