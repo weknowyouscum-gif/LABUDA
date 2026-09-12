@@ -119,6 +119,8 @@ fun LabudaApp(activity: MainActivity) {
             connected = prefs.getBoolean(KEY_VPN_RUNNING, false)
             val rx = prefs.getLong(VpnStats.KEY_RX, 0)
             val tx = prefs.getLong(VpnStats.KEY_TX, 0)
+            val err = prefs.getString("vpn_error", null)
+            if (!connected && !err.isNullOrBlank()) message = err
             val selectedComment = subs.firstOrNull { s -> s.profiles.any { it.raw == selected?.raw } }?.comment.orEmpty()
             stats = VpnStatsSnapshot(rx + tx, rx, tx, prefs.getLong(VpnStats.KEY_RX_SPEED, 0), prefs.getLong(VpnStats.KEY_TX_SPEED, 0), selectedComment)
             delay(1000)
@@ -173,7 +175,12 @@ fun LabudaApp(activity: MainActivity) {
                         ProfileStore.select(activity, p)
                         if (connected) activity.switchVpn()
                     },
-                    onConnect = { if (connected) activity.stopVpn() else activity.startVpn() },
+                    onConnect = {
+                        if (connected) activity.stopVpn() else {
+                            message = "Подключение…"
+                            activity.startVpn()
+                        }
+                    },
                     onRefresh = {
                         if (!busy) scope.launch {
                             busy = true
