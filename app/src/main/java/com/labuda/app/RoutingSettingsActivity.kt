@@ -114,7 +114,6 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
     var search by remember { mutableStateOf("") }
     var apps by remember { mutableStateOf<List<RoutingApp>>(emptyList()) }
 
-    // The PackageManager/icon scan was blocking the main thread. Run it in the background so Routing opens immediately.
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { loadApps(context) }
     }
@@ -129,12 +128,12 @@ private fun RoutingScreen(activity: RoutingSettingsActivity) {
             }
         }.filter { q.isBlank() || it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q) }
     }
-    MaterialTheme {
-        Surface(Modifier.fillMaxSize()) {
+    LabudaTheme {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { (context as Activity).finish() }) { Icon(Icons.Filled.ArrowBack, "Назад") }
-                    Text("Настройки • Маршрутизация", fontSize = 21.sp)
+                    IconButton(onClick = { (context as Activity).finish() }) { Icon(Icons.Filled.ArrowBack, "Назад", tint = MaterialTheme.colorScheme.primary) }
+                    Text("Настройки • Маршрутизация", fontSize = 21.sp, color = MaterialTheme.colorScheme.primary)
                 }
                 Text("Режим маршрутизации", fontSize = 16.sp)
                 Card(Modifier.fillMaxWidth()) {
