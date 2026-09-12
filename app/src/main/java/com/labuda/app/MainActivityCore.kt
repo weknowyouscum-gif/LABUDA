@@ -27,9 +27,7 @@ class MainActivity : ComponentActivity() {
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) startVpnService()
     }
-    private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        prepareVpn()
-    }
+    private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private val qrImport = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) {
             val fromIntent = it.data?.dataString
@@ -68,7 +66,6 @@ class MainActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
         }
         prepareVpn()
     }
@@ -78,7 +75,9 @@ class MainActivity : ComponentActivity() {
     }
     private fun vpnCommand(action: String) {
         val intent = Intent(this, LabudaVpnService::class.java).setAction(action)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        }.onFailure { startService(intent) }
     }
     private fun startVpnService() { vpnCommand(LabudaVpnService.ACTION_START) }
     fun stopVpn() { vpnCommand(LabudaVpnService.ACTION_STOP) }
@@ -86,10 +85,10 @@ class MainActivity : ComponentActivity() {
 }
 
 object VlessParser {
-    private val PATTERN = Regex("""vless://[^\\s\"<>]+""", RegexOption.IGNORE_CASE)
+    private val PATTERN = Regex("vless://\\S+", RegexOption.IGNORE_CASE)
     fun parseSubscription(input: String): List<VlessProfile> {
         val decoded = decode(input.trim())
-        return PATTERN.findAll(decoded).map { it.value.trim().trimEnd(',', ';', '\r', '\n') }
+        return PATTERN.findAll(decoded).map { it.value.trim().trimEnd(',', ';', '\r', '\n', '"', '\'') }
             .mapNotNull { parseUri(it) }.distinctBy { it.raw }
             .mapIndexed { i, p -> p.copy(id = "${p.host}:${p.port}:$i") }.toList()
     }
@@ -104,7 +103,8 @@ object VlessParser {
     }
     private fun parseUri(raw: String): VlessProfile? {
         return try {
-            val uri = URI(raw.substringBefore('#'))
+            val clean = raw.substringBefore(' ').trim()
+            val uri = URI(clean.substringBefore('#'))
             val user = uri.userInfo ?: return null
             val uuid = user.substringBefore(':')
             if (uuid.isBlank() || uri.host.isNullOrBlank()) return null
@@ -112,7 +112,7 @@ object VlessParser {
                 p.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to URLDecoder.decode(it[1], "UTF-8") }
             }.toMap()
             val sni = q["sni"].orEmpty().ifBlank { q["host"].orEmpty() }
-            val remark = remarkFromRaw(raw)
+            val remark = remarkFromRaw(clean).ifBlank { q["remarks"].orEmpty() }.ifBlank { q["ps"].orEmpty() }
             VlessProfile(
                 raw.hashCode().toString(),
                 formatServerName(remark, "", uri.host.orEmpty(), sni),
@@ -121,7 +121,7 @@ object VlessParser {
                 q["type"].orEmpty().ifBlank { q["network"].orEmpty().ifBlank { "tcp" } },
                 q["type"].orEmpty().ifBlank { "tcp" },
                 q["path"].orEmpty(), sni,
-                q["fp"].orEmpty(), q["pbk"].orEmpty(), q["sid"].orEmpty(), raw
+                q["fp"].orEmpty(), q["pbk"].orEmpty(), q["sid"].orEmpty(), clean
             )
         } catch (_: Exception) {
             null
