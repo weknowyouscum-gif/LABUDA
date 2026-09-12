@@ -48,10 +48,11 @@ fun LabudaApp(activity: MainActivity) {
                     message = "Подписка уже добавлена"
                 } else {
                     val title = normalizeSubscriptionTitle(p.title)
+                    val comment = formatSubscriptionComment(p.comment).ifBlank { sharedRemark(p.profiles) }
                     val ready = SubscriptionInfo(
-                        url.hashCode().toString(), url, title, p.comment,
+                        url.hashCode().toString(), url, title, comment,
                         p.totalBytes, p.usedBytes, p.expireAt,
-                        p.profiles.map { it.copy(name = cleanServerName(it.name, title)) }
+                        p.profiles.map { it.copy(name = cleanServerName(it.name, title, it.host, it.sni, comment)) }
                     )
                     val pinged = withContext(Dispatchers.IO) {
                         ready.profiles.map { it.copy(latencyMs = ping(it.host, it.port)) }
@@ -77,14 +78,15 @@ fun LabudaApp(activity: MainActivity) {
             current.map { s ->
                 importSubscription(activity, s.url).getOrNull()?.let { p ->
                     val title = normalizeSubscriptionTitle(p.title).ifBlank { s.title }
+                    val comment = formatSubscriptionComment(p.comment).ifBlank { sharedRemark(p.profiles) }.ifBlank { s.comment }
                     s.copy(
                         title = title,
-                        comment = p.comment.ifBlank { s.comment },
+                        comment = comment,
                         totalBytes = p.totalBytes,
                         usedBytes = p.usedBytes,
                         expireAt = p.expireAt,
                         profiles = p.profiles.map {
-                            it.copy(name = cleanServerName(it.name, title), latencyMs = ping(it.host, it.port))
+                            it.copy(name = cleanServerName(it.name, title, it.host, it.sni, comment), latencyMs = ping(it.host, it.port))
                         }
                     )
                 } ?: s
