@@ -23,7 +23,6 @@
             </intent-filter>
         </activity>
         <activity android:name=".SettingsActivity" android:exported="false" />
-        <activity android:name=".DesignActivity" android:exported="false" />
         <activity android:name=".RoutingSettingsActivity" android:exported="false" />
         <activity android:name=".QrScannerActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
