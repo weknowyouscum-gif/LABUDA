@@ -8,8 +8,9 @@ s = p.read_text()
 # to the requested Times New Roman appearance without adding a font asset.
 if "import androidx.compose.ui.text.font.FontFamily" not in s:
     s = s.replace("import androidx.compose.ui.text.font.FontWeight\n", "import androidx.compose.ui.text.font.FontFamily\nimport androidx.compose.ui.text.font.FontWeight\n")
-if "import androidx.compose.ui.platform.LocalTextStyle" not in s:
-    s = s.replace("import androidx.compose.ui.text.font.FontWeight\n", "import androidx.compose.ui.platform.LocalTextStyle\nimport androidx.compose.ui.text.font.FontWeight\n")
+if "import androidx.compose.material.LocalTextStyle" not in s:
+    s = s.replace("import androidx.compose.ui.platform.LocalTextStyle\n", "")
+    s = s.replace("import androidx.compose.ui.text.font.FontWeight\n", "import androidx.compose.material.LocalTextStyle\nimport androidx.compose.ui.text.font.FontWeight\n")
 if "import androidx.compose.runtime.CompositionLocalProvider" not in s:
     s = s.replace("import androidx.compose.runtime.Composable\n", "import androidx.compose.runtime.Composable\nimport androidx.compose.runtime.CompositionLocalProvider\n")
 
