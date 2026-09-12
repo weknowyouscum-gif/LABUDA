@@ -1,8 +1,15 @@
 from pathlib import Path
 
-# LABUDA 1.0.0.0 build-time compatibility and stabilization patch.
+# LABUDA 1.0.0.1 build-time compatibility and stabilization patch.
 p = Path("app/src/main/java/com/labuda/app/MainActivity.kt")
 s = p.read_text()
+
+# Compose's platform serif is the closest built-in Android equivalent to the
+# requested Times New Roman look without bundling a separate font file.
+if "import androidx.compose.material3.Typography" not in s:
+    s = s.replace("import androidx.compose.material3.Text\n", "import androidx.compose.material3.Text\nimport androidx.compose.material3.Typography\n")
+if "import androidx.compose.ui.text.font.FontFamily" not in s:
+    s = s.replace("import androidx.compose.ui.text.font.FontWeight\n", "import androidx.compose.ui.text.font.FontFamily\nimport androidx.compose.ui.text.font.FontWeight\n")
 
 start = s.find('@Composable private fun LabudaApp')
 end = s.find('\n\nprivate fun normalizeSubscriptionTitle', start)
@@ -134,7 +141,8 @@ private fun LabudaApp(activity: MainActivity) {
     }
 
     MaterialTheme(
-        colorScheme = if (dark) darkColorScheme() else lightColorScheme()
+        colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
+        typography = Typography(defaultFontFamily = FontFamily.Serif)
     ) {
         Surface(Modifier.fillMaxSize()) {
             if (showImport) {
@@ -172,4 +180,4 @@ private fun LabudaApp(activity: MainActivity) {
 
 s = s[:start] + new_app + s[end:]
 p.write_text(s)
-print("LABUDA 1.0.0.0: stabilized Compose state flow, removed blocking UI refresh")
+print("LABUDA 1.0.0.1: stabilized Compose state flow and applied built-in serif typography")
