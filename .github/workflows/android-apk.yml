@@ -1,0 +1,52 @@
+name: Android APK
+
+on:
+  push:
+    branches:
+      - labuda-android-8-updates
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Fetch Xray Android engine
+        run: |
+          mkdir -p app/libs
+          curl -L --fail --retry 3 -o app/libs/libv2ray.aar https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
+
+      - name: Apply source stabilization patch
+        run: python3 scripts/fix_052_compile.py
+
+      - name: Fix Compose text-style import
+        run: sed -i 's/import androidx.compose.material.LocalTextStyle/import androidx.compose.material3.LocalTextStyle/' app/src/main/java/com/labuda/app/MainActivity.kt
+
+      - name: Apply runtime optimization patch
+        run: python3 scripts/optimize_runtime.py
+
+      - name: Build debug APK
+        run: gradle --no-daemon clean assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LABUDA-1.0.0.1-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
