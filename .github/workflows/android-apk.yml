@@ -32,6 +32,9 @@ jobs:
           mkdir -p app/libs
           curl -L --fail --retry 3 -o app/libs/libv2ray.aar https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.9.9/libv2ray.aar
 
+      - name: Apply source stabilization patch
+        run: python3 scripts/fix_052_compile.py
+
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
 
