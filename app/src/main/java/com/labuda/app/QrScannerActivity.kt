@@ -23,9 +23,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -37,10 +35,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,7 +44,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,23 +54,30 @@ import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 
 class QrScannerActivity : ComponentActivity() {
+    private var cameraAllowed by mutableStateOf(false)
     private val galleryPick = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@registerForActivityResult
         runCatching {
-            val image = InputImage.fromFilePath(this, uri)
-            BarcodeScanning.getClient().process(image)
+            BarcodeScanning.getClient().process(InputImage.fromFilePath(this, uri))
                 .addOnSuccessListener { codes ->
                     codes.firstOrNull()?.rawValue?.takeIf { it.isNotBlank() }?.let { finishWithValue(it) }
                 }
         }
     }
+    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        cameraAllowed = granted
+        if (!granted) finish()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        cameraAllowed = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (!cameraAllowed) cameraPermission.launch(Manifest.permission.CAMERA)
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize(), color = Color.Black) {
                     QrScanScreen(
+                        cameraAllowed = cameraAllowed,
                         onBack = { finish() },
                         onGallery = { galleryPick.launch("image/*") },
                         onDetected = { finishWithValue(it) }
@@ -94,25 +96,15 @@ class QrScannerActivity : ComponentActivity() {
 }
 
 @Composable
-private fun QrScanScreen(onBack: () -> Unit, onGallery: () -> Unit, onDetected: (String) -> Unit) {
-    val context = LocalContext.current
+private fun QrScanScreen(
+    cameraAllowed: Boolean,
+    onBack: () -> Unit,
+    onGallery: () -> Unit,
+    onDetected: (String) -> Unit
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    var permissionGranted by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
-    }
-    val permission = remember {
-        (context as ComponentActivity).registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            permissionGranted = granted
-            if (!granted) onBack()
-        }
-    }
-    DisposableEffect(Unit) {
-        if (!permissionGranted) permission.launch(Manifest.permission.CAMERA)
-        onDispose { }
-    }
-
     Box(Modifier.fillMaxSize()) {
-        if (permissionGranted) {
+        if (cameraAllowed) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
@@ -158,19 +150,19 @@ private fun QrScanScreen(onBack: () -> Unit, onGallery: () -> Unit, onDetected: 
         IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Назад", tint = Color.White)
         }
-        TextButton(
-            onClick = onGallery,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 36.dp).background(Color(0x99000000), RoundedCornerShape(20.dp)).padding(horizontal = 8.dp)
-        ) {
-            Icon(Icons.Filled.Image, contentDescription = null, tint = Color.White)
-            Text("  Галерея", color = Color.White, fontSize = 16.sp)
-        }
         Text(
             "Наведите QR в рамку",
             color = Color.White,
             fontSize = 15.sp,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)
         )
+        TextButton(
+            onClick = onGallery,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 36.dp).background(Color(0x99000000), RoundedCornerShape(20.dp))
+        ) {
+            Icon(Icons.Filled.Image, contentDescription = null, tint = Color.White)
+            Text("  Галерея", color = Color.White, fontSize = 16.sp)
+        }
     }
 }
 
@@ -182,16 +174,17 @@ private fun ScanMask() {
             val side = box.toPx()
             val left = (size.width - side) / 2f
             val top = (size.height - side) / 2f
-            drawRect(Color(0x99000000), size = ComposeSize(size.width, top))
-            drawRect(Color(0x99000000), topLeft = Offset(0f, top), size = ComposeSize(left, side))
-            drawRect(Color(0x99000000), topLeft = Offset(left + side, top), size = ComposeSize(size.width - left - side, side))
-            drawRect(Color(0x99000000), topLeft = Offset(0f, top + side), size = ComposeSize(size.width, size.height - top - side))
-            val stroke = 6.dp.toPx()
+            val dim = Color(0x99000000)
+            drawRect(dim, size = ComposeSize(size.width, top))
+            drawRect(dim, topLeft = Offset(0f, top), size = ComposeSize(left, side))
+            drawRect(dim, topLeft = Offset(left + side, top), size = ComposeSize(size.width - left - side, side))
+            drawRect(dim, topLeft = Offset(0f, top + side), size = ComposeSize(size.width, size.height - top - side))
+            val stroke = Stroke(width = 6.dp.toPx())
             val arm = side * 0.18f
-            val color = Color.White
+            val white = Color.White
             fun corner(x: Float, y: Float, dx: Float, dy: Float) {
-                drawLine(color, Offset(x, y), Offset(x + dx * arm, y), stroke)
-                drawLine(color, Offset(x, y), Offset(x, y + dy * arm), stroke)
+                drawLine(white, Offset(x, y), Offset(x + dx * arm, y), stroke.width)
+                drawLine(white, Offset(x, y), Offset(x, y + dy * arm), stroke.width)
             }
             corner(left, top, 1f, 1f)
             corner(left + side, top, -1f, 1f)
