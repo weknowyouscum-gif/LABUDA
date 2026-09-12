@@ -3,7 +3,7 @@ package com.labuda.app
 import android.util.Base64
 import java.net.URLDecoder
 
-private val ACCOUNT_ID = Regex("(?i)[A-Za-z\u0410-\u044f]\d{8,}")
+private val ACCOUNT_ID = Regex("[A-Za-z][0-9]{8,}", RegexOption.IGNORE_CASE)
 
 private fun looksLikeBase64(value: String): Boolean {
     val compact = value.replace("\\s".toRegex(), "")
