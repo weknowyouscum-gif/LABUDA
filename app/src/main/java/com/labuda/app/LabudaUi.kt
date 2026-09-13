@@ -153,7 +153,7 @@ private fun NeonRing(connected: Boolean, size: Int = 132, textSize: Int = 36) {
 fun ImportScreen(
     url: String, onUrl: (String) -> Unit, busy: Boolean, message: String,
     onScanQr: () -> Unit, onPickQrImage: () -> Unit, onClipboard: () -> Unit,
-    onBack: (() -> Unit)?, onImport: () -> Unit, onBuy: () -> Unit
+    onBack: (() -> Unit)?, onImport: () -> Unit
 ) {
     var showQrChoice by remember { mutableStateOf(false) }
     val purple = MaterialTheme.colorScheme.primary
@@ -186,10 +186,6 @@ fun ImportScreen(
                     Spacer(Modifier.height(12.dp))
                     Button(onImport, Modifier.fillMaxWidth().height(52.dp), enabled = !busy && url.isNotBlank(), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = purple, contentColor = Color.White)) {
                         Text(if (busy) "Загрузка…" else "Импортировать подписку", fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(onBuy, Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(1.dp, purple), colors = ButtonDefaults.outlinedButtonColors(contentColor = purple)) {
-                        Text("Купить подписку", fontWeight = FontWeight.Bold)
                     }
                     if (message.isNotBlank()) Text(message, Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
