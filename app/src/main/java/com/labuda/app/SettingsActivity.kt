@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.sp
 
 const val LABUDA_SUPPORT_URL = "https://t.me/LABUDASAPP"
 const val LABUDA_DONATE_URL = "https://yoomoney.ru/fundraise/1K8LRRNMB65.260912"
-const val LABUDA_BUY_URL = "https://yoomoney.ru/fundraise/1K8LRRNMB65.260912"
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
